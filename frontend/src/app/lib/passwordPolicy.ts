@@ -14,10 +14,6 @@ export const PASSWORD_RULES: PasswordRule[] = [
   { id: 'special', label: '특수문자 포함', test: (v) => /[^A-Za-z0-9]/.test(v) },
 ];
 
-export function isPasswordValid(value: string): boolean {
-  return PASSWORD_RULES.every((rule) => rule.test(value));
-}
-
 // 정책 위반 시 첫 번째 실패 사유 메시지를 반환한다(없으면 null).
 export function getPasswordError(value: string): string | null {
   if (value.length > 128) return '비밀번호는 128자를 초과할 수 없습니다.';

@@ -73,9 +73,6 @@ class SlowFading:
         self._state[key] = current
         return current
 
-    def forget(self, key: tuple[str, str]) -> None:
-        self._state.pop(key, None)
-
 
 def sample_rssi(base_rssi: float, tx_offset: float, slow_offset: float, rng: random.Random) -> float:
     return base_rssi + tx_offset + slow_offset + rng.gauss(0.0, FAST_NOISE_SIGMA_DB)
