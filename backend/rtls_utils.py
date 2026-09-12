@@ -130,36 +130,6 @@ def read_cached_tag_location(tag_id: str) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
-def load_cached_tag_locations(tag_ids: set[str]) -> dict[str, dict]:
-    if not tag_ids:
-        return {}
-
-    client = get_redis_client()
-    if client is None:
-        return {}
-
-    keys = {tag_id: get_tag_location_cache_key(tag_id) for tag_id in tag_ids}
-    try:
-        pipe = client.pipeline()
-        for key in keys.values():
-            pipe.get(key)
-        raw_values = pipe.execute()
-    except Exception:
-        return {}
-
-    results: dict[str, dict] = {}
-    for tag_id, raw in zip(keys.keys(), raw_values, strict=True):
-        if not raw:
-            continue
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
-            results[tag_id] = payload
-    return results
-
-
 def load_all_cached_tag_locations() -> dict[str, dict]:
     client = get_redis_client()
     if client is None:

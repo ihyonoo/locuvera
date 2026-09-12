@@ -150,9 +150,7 @@ def build_demo_recalculated_merkle_root(recorded_merkle_root: str | None, should
         return None
     if not should_fail:
         return recorded_merkle_root
-    digest = hashlib.sha256(
-        f"{recorded_merkle_root}:tampered-merkle-root".encode()
-    ).hexdigest()
+    digest = hashlib.sha256(f"{recorded_merkle_root}:tampered-merkle-root".encode()).hexdigest()
     return f"0x{digest}"
 
 
@@ -273,9 +271,7 @@ def build_blockchain_demo_history() -> dict:
             item["blockchain"]["transaction_index"],
         )
     )
-    verified_count = sum(
-        1 for item in items if item["blockchain"]["verification_status"] == "verified"
-    )
+    verified_count = sum(1 for item in items if item["blockchain"]["verification_status"] == "verified")
 
     return {
         "ok": True,
