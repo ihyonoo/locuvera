@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 로컬 전면 가동: Colima → 인프라(postgres·redis·besu) → backend → frontend → simulator.
+# 로컬 전면 가동: Docker Desktop → 인프라(postgres·redis·besu) → backend → frontend → simulator.
 # 멱등: 이미 떠 있는 건 건드리지 않고 넘어간다.
 # 로그는 .logs/backend.log / .logs/frontend.log / .logs/simulator.log (매 기동마다 새로 씀).
 # 정지: bash scripts/dev-down.sh 는 없다 — 앱은 kill, 인프라는 docker-compose -f docker-compose.dev.yml down.
@@ -12,12 +12,18 @@ mkdir -p "$ROOT/.logs"
 
 port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
-# 1) Docker 런타임(Colima)
+# 1) Docker 런타임(Docker Desktop)
 if docker info >/dev/null 2>&1; then
   echo "[1/6] docker: 이미 실행 중"
 else
-  echo "[1/6] docker: colima start"
-  colima start
+  echo "[1/6] docker: Docker Desktop 시작"
+  open -a Docker
+  # 앱 실행과 데몬 기동 사이에 시차가 있다 — 소켓이 열릴 때까지 대기(최대 60초).
+  for _ in $(seq 60); do
+    docker info >/dev/null 2>&1 && break
+    sleep 1
+  done
+  docker info >/dev/null 2>&1 || { echo "docker 데몬이 60초 안에 응답하지 않았다"; exit 1; }
 fi
 
 # 2) 인프라 — postgres + redis + besu(검증자 4 + RPC 노드)
