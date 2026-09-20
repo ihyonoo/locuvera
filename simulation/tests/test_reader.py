@@ -66,3 +66,29 @@ class TestBuildPayload:
         window.add("EQ-0001", -70.0, at=100.0)
         assert window.build_payload(now=100.5)["observations"][0]["count"] == 1
         assert window.build_payload(now=100.6)["observations"][0]["count"] == 1
+
+
+class TestConfigurableAggregation:
+    """평가에서 같은 원시 표본을 다른 설정으로 다시 집계할 수 있어야 한다."""
+
+    def _window(self, **kwargs):
+        window = reader.ReaderWindow("M203", **kwargs)
+        for at, rssi in ((100.0, -90.0), (100.4, -70.0), (100.8, -68.0)):
+            window.add("EQ-0001", rssi, at=at)
+        return window
+
+    def test_default_is_the_real_reader_spec(self):
+        window = self._window()
+        assert window.window_sec == reader.WINDOW_SEC
+        assert window.build_payload(now=101.0)["observations"][0]["rssi"] == -70
+
+    def test_aggregate_can_be_swapped(self):
+        assert self._window(aggregate="max").build_payload(now=101.0)["observations"][0]["rssi"] == -68
+        assert self._window(aggregate="min").build_payload(now=101.0)["observations"][0]["rssi"] == -90
+        assert self._window(aggregate="mean").build_payload(now=101.0)["observations"][0]["rssi"] == -76
+
+    def test_a_shorter_window_drops_the_older_samples(self):
+        observations = self._window(window_sec=0.5).build_payload(now=101.0)["observations"]
+        # 100.5초 이전 표본이 빠져 -68 하나만 남는다.
+        assert observations[0]["count"] == 1
+        assert observations[0]["rssi"] == -68

@@ -30,6 +30,12 @@ CREATE TABLE IF NOT EXISTS truth (
     zone_b TEXT NOT NULL,
     progress REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS raw_samples (
+    ts REAL NOT NULL,
+    reader_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    rssi REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -40,6 +46,7 @@ CREATE TABLE IF NOT EXISTS meta (
 INDEXES = """
 CREATE INDEX IF NOT EXISTS observations_seq ON observations (seq);
 CREATE INDEX IF NOT EXISTS truth_tag ON truth (tag_id, ts);
+CREATE INDEX IF NOT EXISTS raw_ts ON raw_samples (ts);
 """
 
 
@@ -73,6 +80,15 @@ def write_observations(connection: sqlite3.Connection, rows: Iterable[Observatio
 
 def write_truth(connection: sqlite3.Connection, rows: Iterable[TruthSample]) -> None:
     connection.executemany("INSERT INTO truth (ts, tag_id, zone_a, zone_b, progress) VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def write_raw_samples(connection: sqlite3.Connection, rows: Iterable[tuple[float, str, str, float]]) -> None:
+    connection.executemany("INSERT INTO raw_samples VALUES (?, ?, ?, ?)", rows)
+
+
+def read_raw_samples(connection: sqlite3.Connection) -> Iterator[tuple[float, str, str, float]]:
+    """집계 이전 표본을 시각 순으로 읽는다. 리더 파라미터를 바꿔 다시 집계할 때 쓴다."""
+    yield from connection.execute("SELECT ts, reader_id, tag_id, rssi FROM raw_samples ORDER BY ts")
 
 
 def finalize(connection: sqlite3.Connection) -> None:

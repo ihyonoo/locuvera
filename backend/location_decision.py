@@ -21,6 +21,9 @@ class DecisionParams:
     hyst_db: int = HYST_DB
     dwell_sec: int = DWELL_SEC
     stale_sec: int = STALE_SEC
+    # 0이면 만료 전까지 값을 그대로 쓰는 계단식이다. 양수면 경과 시간에 비례해 값을 깎아,
+    # 낡은 관측이 방금 들어온 값과 같은 무게로 경쟁하지 않게 한다.
+    decay_db_per_sec: float = 0.0
 
 
 DEFAULT_PARAMS = DecisionParams()
@@ -36,10 +39,22 @@ def new_tag_state() -> dict:
     }
 
 
-def pick_best_reader(observations: dict[str, dict], now: int, stale_sec: int = STALE_SEC):
+def effective_rssi(observation: dict, now: int, decay_db_per_sec: float) -> float:
+    """경과 시간만큼 깎은 신호 세기. 감쇠가 0이면 기록된 값 그대로다."""
+    if not decay_db_per_sec:
+        return observation["rssi"]
+    return observation["rssi"] - decay_db_per_sec * (now - observation["recv_ts"])
+
+
+def pick_best_reader(
+    observations: dict[str, dict],
+    now: int,
+    stale_sec: int = STALE_SEC,
+    decay_db_per_sec: float = 0.0,
+):
     """신선한 관측 중 신호가 가장 강한 (reader_id, rssi, recv_ts). 하나도 없으면 None."""
     candidates = [
-        (reader_id, observation["rssi"], observation["recv_ts"])
+        (reader_id, effective_rssi(observation, now, decay_db_per_sec), observation["recv_ts"])
         for reader_id, observation in observations.items()
         if now - observation["recv_ts"] <= stale_sec
     ]
@@ -61,7 +76,7 @@ def decide_transition(
 
     전환이 확정되면 기록에 쓸 (reader_id, rssi, now)를, 아니면 None을 돌려준다.
     """
-    best = pick_best_reader(observations, now, params.stale_sec)
+    best = pick_best_reader(observations, now, params.stale_sec, params.decay_db_per_sec)
     if best is None:
         return None
 
@@ -78,7 +93,7 @@ def decide_transition(
 
     current_observation = observations.get(current_reader)
     current_rssi = (
-        current_observation["rssi"]
+        effective_rssi(current_observation, now, params.decay_db_per_sec)
         if current_observation and (now - current_observation["recv_ts"] <= params.stale_sec)
         else STALE_RSSI
     )
