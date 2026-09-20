@@ -28,6 +28,7 @@ try:
         send_reset_email,
         send_verification_email,
     )
+    from backend.location_decision import decide_transition, new_tag_state
     from backend.nfc_tap import consume_tap_session, master_key_missing, verify_tap_and_mint_session
     from backend.ntag424 import UID_RE, parse_sdm_params
     from backend.rtls_utils import (
@@ -70,15 +71,12 @@ try:
         APP_PUBLIC_URL,
         DATABASE_URL,
         DEMO_LOGIN_ENABLED,
-        DWELL_SEC,
         EMAIL_VERIFY_TTL_SEC,
-        HYST_DB,
         OAUTH_HANDOFF_TTL_SEC,
         OAUTH_PENDING_TTL_SEC,
         PASSWORD_RESET_TTL_SEC,
         READER_LOCATION,
         READER_OFFLINE_SEC,
-        STALE_SEC,
         TAG_OFFLINE_SEC,
     )
     from backend.usage_history_service import (
@@ -112,6 +110,7 @@ except ModuleNotFoundError as exc:
         send_reset_email,
         send_verification_email,
     )
+    from location_decision import decide_transition, new_tag_state
     from nfc_tap import consume_tap_session, master_key_missing, verify_tap_and_mint_session
     from ntag424 import UID_RE, parse_sdm_params
     from rtls_utils import (
@@ -154,15 +153,12 @@ except ModuleNotFoundError as exc:
         APP_PUBLIC_URL,
         DATABASE_URL,
         DEMO_LOGIN_ENABLED,
-        DWELL_SEC,
         EMAIL_VERIFY_TTL_SEC,
-        HYST_DB,
         OAUTH_HANDOFF_TTL_SEC,
         OAUTH_PENDING_TTL_SEC,
         PASSWORD_RESET_TTL_SEC,
         READER_LOCATION,
         READER_OFFLINE_SEC,
-        STALE_SEC,
         TAG_OFFLINE_SEC,
     )
     from usage_history_service import (
@@ -257,21 +253,6 @@ def insert_nfc_event(
         sql,
         (usage_id, tag_id, user_id, equipment_nfc_token, action, result, reader_id, location_name, reason),
     )
-
-
-def pick_best_reader(tag_id: str, now: int):
-    readers = tag_obs.get(tag_id, {})
-    candidates = []
-
-    for reader_id, observation in readers.items():
-        if now - observation["recv_ts"] <= STALE_SEC:
-            candidates.append((reader_id, observation["rssi"], observation["recv_ts"]))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda item: item[1], reverse=True)
-    return candidates[0]
 
 
 def _send_verification_email_for(user_id: int, email: str) -> None:
@@ -961,65 +942,10 @@ def ingest(payload: Payload):
             "recv_ts": now,
         }
 
-        best = pick_best_reader(tag_id, now)
-        if best is None:
-            continue
-
-        best_reader_id, best_rssi, _recv_ts = best
-        state = tag_state.setdefault(
-            tag_id,
-            {
-                "current_reader": None,
-                "current_rssi": None,
-                "candidate_reader": None,
-                "candidate_since": None,
-                "updated_at": None,
-            },
-        )
-
-        current_reader = state["current_reader"]
-        if current_reader is None:
-            state["current_reader"] = best_reader_id
-            state["current_rssi"] = best_rssi
-            state["updated_at"] = now
-            state["candidate_reader"] = None
-            state["candidate_since"] = None
-            db_updates[tag_id] = (best_reader_id, best_rssi, now)
-            continue
-
-        current_observation = tag_obs[tag_id].get(current_reader)
-        current_rssi = (
-            current_observation["rssi"]
-            if current_observation and (now - current_observation["recv_ts"] <= STALE_SEC)
-            else -999
-        )
-
-        if best_reader_id == current_reader:
-            state["current_rssi"] = best_rssi
-            state["candidate_reader"] = None
-            state["candidate_since"] = None
-            state["updated_at"] = now
-            continue
-
-        if best_rssi - current_rssi < HYST_DB:
-            state["candidate_reader"] = None
-            state["candidate_since"] = None
-            state["current_rssi"] = current_rssi
-            state["updated_at"] = now
-            continue
-
-        if state["candidate_reader"] != best_reader_id:
-            state["candidate_reader"] = best_reader_id
-            state["candidate_since"] = now
-            continue
-
-        if state["candidate_since"] and (now - state["candidate_since"] >= DWELL_SEC):
-            state["current_reader"] = best_reader_id
-            state["current_rssi"] = best_rssi
-            state["updated_at"] = now
-            state["candidate_reader"] = None
-            state["candidate_since"] = None
-            db_updates[tag_id] = (best_reader_id, best_rssi, now)
+        state = tag_state.setdefault(tag_id, new_tag_state())
+        transition = decide_transition(tag_obs[tag_id], state, now)
+        if transition is not None:
+            db_updates[tag_id] = transition
 
     insert_location_history(db_updates, known_tag_ids=registered_tag_ids)
     cache_location_updates(db_updates, reader_locations=reader_locations)

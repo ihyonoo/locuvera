@@ -8,7 +8,8 @@ import { defineConfig } from 'eslint/config';
 
 export default defineConfig([
   // 빌드 산출물·의존성·가상환경 디렉터리는 검사 대상에서 제외한다.
-  { ignores: ['**/dist/**', '**/build/**', '**/node_modules/**', '**/.venv/**', '**/.claude/**'] },
+  // docs/도 제외한다 — 저작권 등록용 소스 사본이 들어 있고, 그 사본은 고쳐서는 안 된다.
+  { ignores: ['**/dist/**', '**/build/**', '**/node_modules/**', '**/.venv/**', '**/.claude/**', 'docs/**'] },
   // 문법 오류·미사용 변수 등 기본 규칙(js/recommended)을 모든 JS/TS 파일에 적용한다.
   { files: ['**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'], plugins: { js }, extends: ['js/recommended'] },
   // TypeScript 전용 규칙을 추가로 적용한다.
