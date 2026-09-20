@@ -98,7 +98,11 @@ class World:
         return self.tags[tag_id].state
 
     def zone_of(self, tag_id: str) -> str:
-        return self._placement(self.tags[tag_id]).zone_a
+        return self.placement_of(tag_id).zone_a
+
+    def placement_of(self, tag_id: str) -> movement.Placement:
+        """참값 위치. 이동 중이면 출발·목적 구역과 진행률이 함께 들어 있다."""
+        return self._placement(self.tags[tag_id])
 
     # --- 물리 -------------------------------------------------------------
 

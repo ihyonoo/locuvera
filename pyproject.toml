@@ -19,7 +19,7 @@ select = ["E", "W", "F", "I", "UP", "C4", "SIM", "B"]
 "backend/**" = ["B904"]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests", "simulation/tests", "tools/ntag/tests"]
+testpaths = ["backend/tests", "simulation/tests", "tools/ntag/tests", "eval/tests"]
 pythonpath = ["."]
 
 [tool.pyrefly]
