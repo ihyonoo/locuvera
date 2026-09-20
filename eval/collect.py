@@ -19,6 +19,26 @@ from simulation.reader import SEND_EVERY_SEC, WINDOW_SEC
 FLUSH_EVERY = 200_000
 
 
+class RecordingWindow:
+    """리더 윈도우를 감싸 집계 이전 표본을 기록한다.
+
+    World.windows가 공개 속성이라 시뮬레이터 코드를 건드리지 않고 끼울 수 있다.
+    집계 방식과 윈도우 길이를 바꿔 다시 집계하려면 집계 이전 값이 남아 있어야 한다.
+    """
+
+    def __init__(self, window, sink: list) -> None:
+        self._window = window
+        self._sink = sink
+        self.reader_id = window.reader_id
+
+    def add(self, tag_id: str, rssi: float, at: float) -> None:
+        self._sink.append((at, self.reader_id, tag_id, rssi))
+        self._window.add(tag_id, rssi, at)
+
+    def build_payload(self, now: float) -> dict:
+        return self._window.build_payload(now)
+
+
 def _git_commit() -> str | None:
     try:
         result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
@@ -33,11 +53,23 @@ def collect(
     hours: float,
     seed: int,
     start: dt.datetime,
+    raw_hours: float = 0.0,
 ) -> dict:
-    """가상 병원을 hours만큼 돌려 트레이스를 쓰고, 요약을 돌려준다."""
+    """가상 병원을 hours만큼 돌려 트레이스를 쓰고, 요약을 돌려준다.
+
+    raw_hours를 주면 처음 그만큼 구간의 집계 이전 표본도 남긴다. 200ms마다 쌓이므로
+    양이 한 자릿수 크고, 리더 파라미터를 실험할 때만 필요하다.
+    """
     horizon = hours * 3600.0
+    raw_horizon = raw_hours * 3600.0
     instance = world.World(rng=random.Random(seed), now=0.0)
     connection = trace.open_trace(out_path, create=True)
+
+    raw_sink: list[tuple[float, str, str, float]] = []
+    if raw_horizon:
+        instance.windows = {
+            reader_id: RecordingWindow(window, raw_sink) for reader_id, window in instance.windows.items()
+        }
 
     observations: list[Observation] = []
     truths: list[TruthSample] = []
@@ -91,18 +123,30 @@ def collect(
                 )
             )
 
+        if raw_horizon and now >= raw_horizon:
+            # 구간이 끝나면 기록을 멈춘다 — 원본 윈도우로 되돌려 남은 시간은 그냥 돌린다.
+            instance.windows = {
+                reader_id: window._window if isinstance(window, RecordingWindow) else window
+                for reader_id, window in instance.windows.items()
+            }
+            raw_horizon = 0.0
+
         if len(observations) >= FLUSH_EVERY:
             trace.write_observations(connection, observations)
             trace.write_truth(connection, truths)
+            trace.write_raw_samples(connection, raw_sink)
             observations.clear()
             truths.clear()
+            raw_sink.clear()
 
     trace.write_observations(connection, observations)
     trace.write_truth(connection, truths)
+    trace.write_raw_samples(connection, raw_sink)
 
     meta = {
         "seed": seed,
         "hours": hours,
+        "raw_hours": raw_hours,
         "start_kst": start.isoformat(),
         "git_commit": _git_commit(),
         "tags": len(instance.tags),
@@ -128,6 +172,7 @@ def collect(
     counts = {
         "observations": connection.execute("SELECT count(*) FROM observations").fetchone()[0],
         "truth": connection.execute("SELECT count(*) FROM truth").fetchone()[0],
+        "raw_samples": connection.execute("SELECT count(*) FROM raw_samples").fetchone()[0],
     }
     connection.close()
     return {**meta, **counts}

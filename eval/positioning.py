@@ -65,17 +65,29 @@ def _parse_args(argv: list[str] | None = None):
     sub = parser.add_subparsers(dest="command", required=True)
 
     collect = sub.add_parser("collect", help="가상 병원을 돌려 관측·참값 트레이스를 남긴다")
-    collect.add_argument("--hours", type=float, default=4.0)
+    collect.add_argument("--hours", type=float, default=24.0)
+    collect.add_argument("--raw-hours", type=float, default=1.0, help="집계 이전 표본을 남길 앞 구간")
     collect.add_argument("--seed", type=int, default=20260920)
-    collect.add_argument("--start", default="2026-09-21T08:00", help="시뮬레이션 속 시작 시각(KST)")
+    collect.add_argument("--start", default="2026-09-21T00:00", help="시뮬레이션 속 시작 시각(KST)")
     collect.add_argument("--out", type=Path, default=Path("eval/runs/latest/trace.sqlite"))
 
     sweep = sub.add_parser("sweep", help="트레이스에 파라미터 격자를 적용해 결과 CSV를 쓴다")
     sweep.add_argument("--trace", type=Path, default=Path("eval/runs/latest/trace.sqlite"))
-    sweep.add_argument("--out", type=Path, default=Path("eval/runs/latest/results.csv"))
+    sweep.add_argument("--out-dir", type=Path, default=Path("eval/runs/latest"))
+    sweep.add_argument("--stage", choices=("decisions", "aggregations", "all"), default="all")
+    sweep.add_argument("--top", type=int, default=5, help="2단계로 넘길 판정 조합 수")
     sweep.add_argument("--workers", type=int, default=None)
 
     return parser.parse_args(argv)
+
+
+def _describe(label: str, row) -> str:
+    return (
+        f"  {label} {row.hyst_db}dB/{row.dwell_sec}초/{row.stale_sec}초"
+        f"/감쇠 {row.decay_db_per_sec}"
+        f" — 정지 정확도 {row.rest_accuracy:.4f}, 전환 지연 p50 {row.delay_p50}"
+        f", 오전환 {row.false_switch_per_hour:.1f}회/시간"
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -88,27 +100,66 @@ def main(argv: list[str] | None = None) -> None:
         from simulation import demand
 
         start = dt.datetime.fromisoformat(args.start).replace(tzinfo=demand.KST)
-        summary = collect(args.out, hours=args.hours, seed=args.seed, start=start)
+        summary = collect(args.out, hours=args.hours, raw_hours=args.raw_hours, seed=args.seed, start=start)
         print(f"트레이스: {args.out}")
-        print(f"  관측 {summary['observations']:,}행 · 참값 {summary['truth']:,}행")
+        print(f"  관측 {summary['observations']:,}행 · 참값 {summary['truth']:,}행 · 원시 {summary['raw_samples']:,}행")
         print(f"  태그 {summary['tags']}개 · 리더 {summary['readers']}대 · 시드 {summary['seed']}")
         return
 
-    from eval.sweep import run
+    from eval import sweep
 
-    rows = run(args.trace, args.out, workers=args.workers)
-    print(f"결과: {args.out} ({len(rows)}조합)")
+    rows = []
+    if args.stage in ("decisions", "all"):
+        out = args.out_dir / "results_decisions.csv"
+        rows = sweep.run_decisions(args.trace, out, workers=args.workers)
+        print(f"1단계 판정 축: {out} ({len(rows)}조합)")
 
-    current = next((r for r in rows if (r.hyst_db, r.dwell_sec, r.stale_sec) == (8, 2, 5)), None)
-    if current is not None:
-        print(f"  현행 8dB/2초/5초 — 정지 정확도 {current.rest_accuracy:.4f}, 전환 지연 p50 {current.delay_p50}")
-
-    best = max((r for r in rows if r.rest_accuracy is not None), key=lambda r: r.rest_accuracy, default=None)
-    if best is not None:
-        print(
-            f"  정지 정확도 최고 {best.hyst_db}dB/{best.dwell_sec}초/{best.stale_sec}초 — "
-            f"{best.rest_accuracy:.4f}, 전환 지연 p50 {best.delay_p50}"
+        current = next(
+            (r for r in rows if (r.hyst_db, r.dwell_sec, r.stale_sec, r.decay_db_per_sec) == (8, 2, 5, 0.0)),
+            None,
         )
+        if current is not None:
+            print(_describe("현행", current))
+        best = max((r for r in rows if r.rest_accuracy is not None), key=lambda r: r.rest_accuracy, default=None)
+        if best is not None:
+            print(_describe("최고", best))
+
+    if args.stage in ("aggregations", "all"):
+        import csv as _csv
+
+        if not rows:
+            with (args.out_dir / "results_decisions.csv").open(encoding="utf-8") as handle:
+                rows = [sweep.Row(**_coerce(record)) for record in _csv.DictReader(handle)]
+
+        decisions = sweep.top_decisions(rows, args.top)
+        out = args.out_dir / "results_aggregations.csv"
+        produced = sweep.run_aggregations(args.trace, out, decisions, workers=args.workers)
+        print(f"2단계 집계 축: {out} ({len(produced)}행)")
+
+
+def _coerce(record: dict) -> dict:
+    """CSV에서 읽은 문자열을 Row의 타입으로 되돌린다."""
+    numeric = {
+        "hyst_db": int,
+        "dwell_sec": int,
+        "stale_sec": int,
+        "missed_transitions": int,
+        "rest_samples": int,
+        "move_samples": int,
+        "true_transitions": int,
+        "judged_transitions": int,
+    }
+    out = {}
+    for key, value in record.items():
+        if key == "aggregate":
+            out[key] = value
+        elif value == "":
+            out[key] = None
+        elif key in numeric:
+            out[key] = numeric[key](value)
+        else:
+            out[key] = float(value)
+    return out
 
 
 if __name__ == "__main__":
