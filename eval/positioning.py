@@ -58,6 +58,40 @@ def replay_transitions(
     return transitions
 
 
+def replay_dataset(dataset, params: DecisionParams = DEFAULT_PARAMS) -> list[tuple[int, int, int]]:
+    """압축 배열 위에서 같은 규칙을 돌린다. (tag_idx, zone_idx, decided_at)를 돌려준다.
+
+    관측마다 딕셔너리를 새로 만들지 않고 리더별 슬롯의 값만 갈아끼운다. 판정 규칙이
+    읽는 항목은 신호 세기와 수신 시각 둘뿐이라, 슬롯을 재사용해도 결과가 달라지지 않는다.
+    """
+    obs_ts = dataset.obs_ts
+    obs_reader = dataset.obs_reader
+    obs_tag = dataset.obs_tag
+    obs_rssi = dataset.obs_rssi
+
+    tables: list[dict[int, dict]] = [{} for _ in range(len(dataset.tags))]
+    states: list[dict] = [new_tag_state() for _ in range(len(dataset.tags))]
+    transitions: list[tuple[int, int, int]] = []
+
+    for position in range(len(obs_ts)):
+        now = obs_ts[position]
+        tag = obs_tag[position]
+        table = tables[tag]
+
+        slot = table.get(obs_reader[position])
+        if slot is None:
+            table[obs_reader[position]] = {"rssi": obs_rssi[position], "recv_ts": now}
+        else:
+            slot["rssi"] = obs_rssi[position]
+            slot["recv_ts"] = now
+
+        transition = decide_transition(table, states[tag], now, params)
+        if transition is not None:
+            transitions.append((tag, transition[0], now))
+
+    return transitions
+
+
 def _parse_args(argv: list[str] | None = None):
     import argparse
 
