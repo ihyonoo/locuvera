@@ -19,9 +19,9 @@ from multiprocessing import Pool
 from pathlib import Path
 
 from backend.location_decision import DecisionParams
-from eval import metrics, trace
+from eval import dataset, metrics, trace
 from eval.aggregate import reaggregate
-from eval.positioning import Observation, replay_transitions
+from eval.positioning import Observation, replay_dataset, replay_transitions
 from simulation.reader import AGGREGATORS, DEFAULT_AGGREGATE, SEND_EVERY_SEC, WINDOW_SEC
 
 HYST_DB_GRID = (0, 2, 4, 6, 8, 10, 12)
@@ -98,6 +98,7 @@ def _row(params: DecisionParams, aggregation: Aggregation, result: metrics.Metri
 
 
 _TRACE_PATH: Path | None = None
+_DATA: dataset.Dataset | None = None
 _TRUTH: list[metrics.TruthSample] | None = None
 _HEARD: set[tuple[str, int]] | None = None
 _DECISIONS: list[DecisionParams] | None = None
@@ -106,22 +107,19 @@ CURRENT_AGGREGATION = Aggregation((WINDOW_SEC, SEND_EVERY_SEC, DEFAULT_AGGREGATE
 
 
 def _init_worker(trace_path: str, decisions: list[DecisionParams] | None = None) -> None:
-    """워커마다 한 번만 참값을 읽어 둔다. 관측은 조합마다 스트리밍한다."""
-    global _TRACE_PATH, _TRUTH, _HEARD, _DECISIONS
+    """워커마다 한 번만 트레이스를 압축 배열로 올린다.
+
+    객체로 올리면 워커 하나가 수 GB를 쓰고, 조합마다 SQLite를 다시 읽으면 1,355만 행을
+    735번 읽게 된다. 압축해서 한 번만 올리면 둘 다 사라진다.
+    """
+    global _TRACE_PATH, _DATA, _DECISIONS
     _TRACE_PATH = Path(trace_path)
     _DECISIONS = decisions
-    connection = trace.open_trace(_TRACE_PATH)
-    _TRUTH = list(trace.read_truth(connection))
-    _HEARD = trace.read_heard(connection)
-    connection.close()
+    _DATA = dataset.load(_TRACE_PATH)
 
 
 def _run_decision(params: DecisionParams) -> Row:
-    connection = trace.open_trace(_TRACE_PATH)
-    transitions = replay_transitions(trace.read_observations(connection), params)
-    connection.close()
-
-    result = metrics.compute(_TRUTH, transitions, heard=_HEARD)
+    result = metrics.compute_dataset(_DATA, replay_dataset(_DATA, params))
     return _row(params, CURRENT_AGGREGATION, result)
 
 
@@ -143,7 +141,18 @@ def _run_aggregation(aggregation: Aggregation) -> list[Row]:
 
     # 원시 표본은 트레이스의 앞부분 구간만 남기므로, 참값도 같은 구간으로 자른다.
     horizon = max(observation.recv_ts for observation in observations)
-    truth = [sample for sample in _TRUTH if sample.ts <= horizon]
+    truth = [
+        metrics.TruthSample(
+            ts=entry.ts[position],
+            tag_id=_DATA.tags.names[index],
+            zone_a=_DATA.zones.names[entry.zone_a[position]],
+            zone_b=_DATA.zones.names[entry.zone_b[position]],
+            progress=0.0,
+        )
+        for index, entry in enumerate(_DATA.truth)
+        for position in range(len(entry.ts))
+        if entry.ts[position] <= horizon
+    ]
     heard = {(observation.tag_id, observation.recv_ts) for observation in observations}
 
     rows = []

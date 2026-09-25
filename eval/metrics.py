@@ -7,7 +7,7 @@
 
 from bisect import bisect_right
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import NamedTuple
 
 # 참값 전환 이후 이만큼 지나도 따라오지 않으면 놓친 전환으로 센다.
@@ -79,7 +79,9 @@ def _group_transitions(transitions: Iterable[tuple[str, str, int]]) -> dict[str,
     for tag_id, reader_id, decided_at in transitions:
         grouped.setdefault(tag_id, []).append((decided_at, reader_id))
     for rows in grouped.values():
-        rows.sort()
+        # 같은 초에 전환이 여러 번 일어나면 나중 것이 그 시각의 판정이다. 시각만으로
+        # 안정 정렬해 실제 순서를 지킨다 — 튜플째 정렬하면 구역 이름순으로 뒤바뀐다.
+        rows.sort(key=lambda row: row[0])
     return grouped
 
 
@@ -93,6 +95,96 @@ def _true_transitions(samples: list[TruthSample]) -> list[tuple[int, str]]:
                 changes.append((sample.ts, sample.zone_a))
             previous = sample.zone_a
     return changes
+
+
+def _zone_at(ts_seq, zone_seq, ts: int):
+    """해당 시각 이하의 가장 최근 참값 구역."""
+    position = bisect_right(ts_seq, ts)
+    return zone_seq[position - 1] if position else None
+
+
+def _accumulate(entries) -> Metrics:
+    """태그별 (참값 시각, 출발 구역, 목적 구역, 청취 판정, 판정 이력)으로 지표를 낸다.
+
+    구역을 문자열로 주든 정수 인덱스로 주든 비교만 하므로 결과는 같다.
+    """
+    rest_total = rest_hit = move_total = unheard = 0
+    delays: list[float] = []
+    missed = 0
+    true_transition_count = judged_transition_count = 0
+    recalls: list[float] = []
+    precisions: list[float] = []
+    false_switches = 0
+    span_seconds = 0
+    tag_count = 0
+
+    for ts_seq, zone_a_seq, zone_b_seq, was_heard, track in entries:
+        tag_count += 1
+        if not len(ts_seq):
+            continue
+        span_seconds = max(span_seconds, ts_seq[-1] - ts_seq[0])
+
+        previous_zone = None
+        changes: list[tuple[int, object]] = []
+        for position in range(len(ts_seq)):
+            ts = ts_seq[position]
+            zone_a = zone_a_seq[position]
+
+            if was_heard is not None and not was_heard(ts):
+                unheard += 1
+
+            if zone_a == zone_b_seq[position]:
+                rest_total += 1
+                if track.zone_at(ts) == zone_a:
+                    rest_hit += 1
+            else:
+                move_total += 1
+
+            if zone_a != previous_zone:
+                if previous_zone is not None:
+                    changes.append((ts, zone_a))
+                previous_zone = zone_a
+
+        # 참값이 바뀐 시각마다, 판정이 같은 구역으로 따라오기까지 걸린 시간.
+        true_transition_count += len(changes)
+        for changed_at, zone in changes:
+            arrival = track.first_arrival(zone, changed_at)
+            if arrival is None or arrival - changed_at > DELAY_HORIZON_SEC:
+                missed += 1
+            else:
+                delays.append(arrival - changed_at)
+
+        # 참값이 그대로인데 판정만 바뀐 전환은 오전환이다.
+        previous_truth = None
+        for ts in track.times:
+            judged_transition_count += 1
+            current_truth = _zone_at(ts_seq, zone_a_seq, ts)
+            if previous_truth is not None and current_truth == previous_truth:
+                false_switches += 1
+            previous_truth = current_truth
+
+        truth_zones = set(zone_a_seq) | set(zone_b_seq)
+        judged_zones = set(track.zones)
+        if truth_zones:
+            recalls.append(len(truth_zones & judged_zones) / len(truth_zones))
+        if judged_zones:
+            precisions.append(len(truth_zones & judged_zones) / len(judged_zones))
+
+    hours = (span_seconds * tag_count) / 3600 if tag_count else 0
+    return Metrics(
+        rest_accuracy=_ratio(rest_hit, rest_total),
+        false_switch_per_hour=false_switches / hours if hours else None,
+        unheard_ratio=_ratio(unheard, rest_total + move_total) if unheard or rest_total else None,
+        delay_p50=_percentile(delays, 0.5),
+        delay_p95=_percentile(delays, 0.95),
+        missed_transitions=missed,
+        path_recall=sum(recalls) / len(recalls) if recalls else None,
+        path_precision=sum(precisions) / len(precisions) if precisions else None,
+        rest_samples=rest_total,
+        move_samples=move_total,
+        true_transitions=true_transition_count,
+        judged_transitions=judged_transition_count,
+    )
 
 
 def compute(
@@ -113,68 +205,41 @@ def compute(
     judged = {tag_id: JudgedTrack(rows) for tag_id, rows in _group_transitions(transitions).items()}
     empty = JudgedTrack([])
 
-    rest_total = rest_hit = move_total = unheard = 0
-    delays: list[float] = []
-    missed = 0
-    true_transition_count = judged_transition_count = 0
-    recalls: list[float] = []
-    precisions: list[float] = []
-    false_switches = 0
-    span_seconds = 0
+    def entries():
+        for tag_id, samples in by_tag.items():
+            listener = None if heard is None else (lambda ts, tag_id=tag_id: (tag_id, ts) in heard)
+            yield (
+                [sample.ts for sample in samples],
+                [sample.zone_a for sample in samples],
+                [sample.zone_b for sample in samples],
+                listener,
+                judged.get(tag_id, empty),
+            )
 
-    for tag_id, samples in by_tag.items():
-        track = judged.get(tag_id, empty)
-        span_seconds = max(span_seconds, samples[-1].ts - samples[0].ts)
+    result = _accumulate(entries())
+    if heard is None:
+        result = replace(result, unheard_ratio=None)
+    return result
 
-        for sample in samples:
-            if heard is not None and (tag_id, sample.ts) not in heard:
-                unheard += 1
-            if sample.resting:
-                rest_total += 1
-                if track.zone_at(sample.ts) == sample.zone_a:
-                    rest_hit += 1
-            else:
-                move_total += 1
 
-        # 참값이 바뀐 시각마다, 판정이 같은 구역으로 따라오기까지 걸린 시간.
-        changes = _true_transitions(samples)
-        true_transition_count += len(changes)
-        for changed_at, zone in changes:
-            arrival = track.first_arrival(zone, changed_at)
-            if arrival is None or arrival - changed_at > DELAY_HORIZON_SEC:
-                missed += 1
-            else:
-                delays.append(arrival - changed_at)
+def compute_dataset(data, transitions: Iterable[tuple[int, int, int]]) -> Metrics:
+    """압축 배열 위에서 같은 지표를 낸다. 구역과 태그는 정수 인덱스로 비교한다."""
+    grouped: dict[int, list[tuple[int, int]]] = {}
+    for tag, zone, decided_at in transitions:
+        grouped.setdefault(tag, []).append((decided_at, zone))
+    for rows in grouped.values():
+        rows.sort(key=lambda row: row[0])
 
-        # 참값이 그대로인데 판정만 바뀐 전환은 오전환이다.
-        truth_at = {sample.ts: sample.zone_a for sample in samples}
-        previous_truth: str | None = None
-        for ts in track.times:
-            judged_transition_count += 1
-            current_truth = truth_at.get(ts)
-            if previous_truth is not None and current_truth == previous_truth:
-                false_switches += 1
-            previous_truth = current_truth
+    empty = JudgedTrack([])
 
-        truth_zones = {sample.zone_a for sample in samples} | {sample.zone_b for sample in samples}
-        judged_zones = set(track.zones)
-        if truth_zones:
-            recalls.append(len(truth_zones & judged_zones) / len(truth_zones))
-        if judged_zones:
-            precisions.append(len(truth_zones & judged_zones) / len(judged_zones))
+    def entries():
+        for index, entry in enumerate(data.truth):
+            yield (
+                entry.ts,
+                entry.zone_a,
+                entry.zone_b,
+                entry.was_heard,
+                JudgedTrack(grouped[index]) if index in grouped else empty,
+            )
 
-    hours = (span_seconds * len(by_tag)) / 3600 if by_tag else 0
-    return Metrics(
-        rest_accuracy=_ratio(rest_hit, rest_total),
-        false_switch_per_hour=false_switches / hours if hours else None,
-        unheard_ratio=_ratio(unheard, rest_total + move_total) if heard is not None else None,
-        delay_p50=_percentile(delays, 0.5),
-        delay_p95=_percentile(delays, 0.95),
-        missed_transitions=missed,
-        path_recall=sum(recalls) / len(recalls) if recalls else None,
-        path_precision=sum(precisions) / len(precisions) if precisions else None,
-        rest_samples=rest_total,
-        move_samples=move_total,
-        true_transitions=true_transition_count,
-        judged_transitions=judged_transition_count,
-    )
+    return _accumulate(entries())
