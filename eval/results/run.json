@@ -1,0 +1,36 @@
+{
+  "seed": 20260920,
+  "hours": 24.0,
+  "raw_hours": 3.0,
+  "start_kst": "2026-09-21T09:00:00+09:00",
+  "git_commit": "4f6e44f607290dc97b393af2325a1de238a3cb18",
+  "tags": 50,
+  "readers": 42,
+  "physics_tick_sec": 0.2,
+  "window_sec": 2.0,
+  "send_every_sec": 1.0,
+  "radio": {
+    "rssi_at_1m": -59.0,
+    "path_loss_exponent": 2.0,
+    "wall_attenuation_db": 6.0,
+    "rx_sensitivity_dbm": -95.0,
+    "fast_noise_sigma_db": 2.5,
+    "slow_noise_sigma_db": 1.5,
+    "tag_tx_sigma_db": 1.5
+  },
+  "demand_band_day": [8, 14],
+  "demand_band_night": [2, 4],
+  "counts": {
+    "observations": 13695628,
+    "truth": 4320000,
+    "raw_samples": 5884660
+  },
+  "results": {
+    "decisions_rows": 735,
+    "aggregations_rows": 240,
+    "stage1_window_hours": 24.0,
+    "stage2_window_hours": 3.0,
+    "stage1_true_transitions": 524,
+    "stage2_true_transitions": 124
+  }
+}
