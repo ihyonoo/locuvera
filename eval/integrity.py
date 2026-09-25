@@ -349,6 +349,11 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(prog="python -m eval.integrity", description="무결성 검증 평가")
     parser.add_argument("--out", type=Path, default=Path("eval/runs/latest/integrity.csv"))
+    parser.add_argument(
+        "--consensus",
+        action="store_true",
+        help="검증 노드를 실제로 내려 정족수 성질을 확인한다 (시나리오 14·15)",
+    )
     args = parser.parse_args(argv)
 
     started = dt.datetime.now()
@@ -363,6 +368,18 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"무결성 시나리오 {len(SCENARIOS)}종", flush=True)
     results = run(args.out, progress=progress)
+
+    if args.consensus:
+        from eval import consensus
+
+        print("\n합의 내결함성 — 검증 노드를 실제로 내린다", flush=True)
+        for case in consensus.run():
+            mark = "✓" if case.matched else "✗"
+            state = "기록 성공" if case.anchored else "기록 실패"
+            print(
+                f"  {mark} {case.number:>2} [D] {case.stopped}대 중단 · 남은 {case.quorum} · {state} · {case.detail}",
+                flush=True,
+            )
 
     passed = sum(1 for result in results if result.matched)
     elapsed = (dt.datetime.now() - started).total_seconds()
