@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import solc from 'solc';
 import { ethers } from 'ethers';
 
@@ -234,6 +234,12 @@ function formatStatus(status, detail = null) {
         verification_method: detail ?? '저장된 트랜잭션 해시가 지정된 블록/인덱스와 일치하지 않습니다.',
         detail,
       };
+    case 'tx_sender_mismatch':
+      return {
+        verification_status: status,
+        verification_method: detail ?? '앵커 트랜잭션의 서명에서 복원한 발신자가 기록 계정과 다릅니다.',
+        detail,
+      };
     case 'transactions_root_mismatch':
       return {
         verification_status: status,
@@ -413,6 +419,23 @@ function encodeTrieNode(node) {
   return ethers.encodeRlp([...node.children.map(childReference), node.value]);
 }
 
+export function recoverSender(tx) {
+  // RPC가 알려주는 from 필드는 믿지 않는다 — 노드를 장악한 공격자가 마음대로 적을 수 있다.
+  // 서명에서 직접 복원해야 개인키를 가진 계정만 그 값을 만들 수 있다는 성질이 성립한다.
+  try {
+    return ethers.Transaction.from(normalizeRawTransaction(tx)).from;
+  } catch {
+    return null;
+  }
+}
+
+export function sameAddress(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  return left.toLowerCase() === right.toLowerCase();
+}
+
 function calculateTransactionsRoot(transactions) {
   // Besu 블록의 transactionsRoot를 동일한 방식으로 다시 계산한다.
   if (!Array.isArray(transactions) || transactions.length === 0) {
@@ -484,6 +507,9 @@ async function main() {
   const parsedInput = JSON.parse(rawInput);
   const inputItems = Array.isArray(parsedInput?.items) ? parsedInput.items : [];
   const deployment = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
+  // 기록 계정의 주소. 배포 기록에 남은 값을 쓰고, 계정을 바꾼 경우에만 환경변수로 덮는다.
+  // 검증기는 개인키를 알 필요가 없다 — 서명이 그 키로 만들어졌는지만 확인하면 된다.
+  const expectedSender = process.env.BESU_SENDER_ADDRESS ?? deployment.deployer ?? null;
   const abi = compileContract();
   const iface = new ethers.Interface(abi);
   const provider = new ethers.JsonRpcProvider(RPC_URL, {
@@ -594,6 +620,8 @@ async function main() {
       tx_included_in_block: null,
       transactions_root_matches: null,
       mismatch_fields: [],
+      tx_sender: null,
+      tx_sender_matches: null,
       anchor: buildAnchorResult(storedAnchor),
     };
 
@@ -697,6 +725,17 @@ async function main() {
       continue;
     }
 
+    // 서명 확인이 먼저다. 입력을 해석해 값을 맞춰 봐야, 그 입력이 기록 계정이 실제로
+    // 제출한 것인지가 확인되지 않으면 위조된 트랜잭션도 통과한다.
+    result.tx_sender = recoverSender(indexedTx);
+    result.tx_sender_matches = expectedSender ? sameAddress(result.tx_sender, expectedSender) : null;
+    if (expectedSender && !result.tx_sender_matches) {
+      result.anchor = buildAnchorResult(resolvedAnchor);
+      Object.assign(result, formatStatus('tx_sender_mismatch', `복원된 발신자: ${result.tx_sender ?? '복원 실패'}`));
+      results.push(result);
+      continue;
+    }
+
     const decodedInput = decodeUsageRecordInput(iface, indexedTx);
     if (!decodedInput) {
       result.anchor = buildAnchorResult(resolvedAnchor);
@@ -775,7 +814,10 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+// 직접 실행할 때만 돈다. 테스트가 이 모듈을 불러올 때 stdin을 기다리며 멈추지 않도록 한다.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
