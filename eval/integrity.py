@@ -15,6 +15,7 @@ import csv
 import datetime as dt
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -42,12 +43,17 @@ BESU_RPC_URL = os.environ.get("BESU_RPC_URL", "http://127.0.0.1:8549")
 # 시작하는데 체인에는 예전 기록이 남아 있어, 그대로 쓰면 재기록 거절에 걸린다.
 USAGE_ID_BASE = 900_000
 
+# 블록 주기가 30초라, 기록이 확정될 때까지 한 주기 이상 기다려야 할 때가 있다.
+ANCHOR_WAIT_TRIES = 4
+ANCHOR_WAIT_SEC = 20
+
 # 체인에 올라가는 항목. 표시용 항목과 구분해 두어야 시나리오 4의 통과를 설명할 수 있다.
 ANCHORED_COLUMNS = {"user_id", "returned_by_user_id", "returned_at", "checkout_at", "movement_path"}
 
 
 @dataclass
 class Result:
+    run: int
     number: int
     tier: str
     name: str
@@ -111,20 +117,29 @@ def reserve_usage_id_range() -> int:
     return base
 
 
-def create_anchored_usage() -> int:
-    """대여와 반납을 실제 경로로 수행해 체인에 기록된 이력을 하나 만든다."""
+def create_anchored_usage(variant: int = 0) -> int:
+    """대여와 반납을 실제 경로로 수행해 체인에 기록된 이력을 하나 만든다.
+
+    variant를 바꾸면 다른 장비와 직원을 고른다. 반복 실행이 같은 이력을 되풀이하면
+    그 이력에만 성립하는 우연을 걸러내지 못하므로, 대여 구역과 이동 경로가 달라지게 한다.
+    """
     rows = _query(
         """
         SELECT nfc_token FROM tags
         WHERE is_real_hardware = FALSE AND asset_status = 'available' AND is_active
-        ORDER BY tag_id LIMIT 1
-        """
+        ORDER BY tag_id OFFSET %s LIMIT 1
+        """,
+        (variant,),
     )
     if not rows:
-        raise RuntimeError("대여 가능한 시뮬레이션 태그가 없다")
+        raise RuntimeError(f"대여 가능한 시뮬레이션 태그가 없다 (variant={variant})")
     nfc_token = rows[0][0]
 
-    staff = token_for(_query("SELECT user_id FROM users WHERE role = 'staff' ORDER BY user_id LIMIT 1")[0][0])
+    staff_rows = _query(
+        "SELECT user_id FROM users WHERE role = 'staff' ORDER BY user_id OFFSET %s LIMIT 1",
+        (variant,),
+    )
+    staff = token_for(staff_rows[0][0])
     status, body = api("POST", "/usage/checkout", staff, {"nfc_token": nfc_token})
     if status != 200:
         raise RuntimeError(f"/usage/checkout 실패: {status} {body}")
@@ -140,8 +155,41 @@ def create_anchored_usage() -> int:
         "ORDER BY usage_id DESC LIMIT 1"
     )[0]
     if not tx_hash:
-        raise RuntimeError(f"이력 {usage_id}이 체인에 기록되지 않았다")
+        _backfill_anchor(usage_id)
     return usage_id
+
+
+def _backfill_anchor(usage_id: int) -> None:
+    """앵커 메타가 비어 있으면 이벤트 로그에서 찾아 채운다.
+
+    블록 주기가 30초인데 온체인 스크립트 타임아웃도 30초라, 반납 시점의 기록 호출이
+    트랜잭션 확정을 못 기다리고 끊길 때가 있다. 기록 자체는 다음 블록에 실리므로 체인에는
+    남지만 데이터베이스의 앵커 칸은 빈 채로 둔다. 회차마다 시작 상태가 달라지면 결과를
+    나란히 읽을 수 없으므로, 검증이 이벤트에서 찾아낸 값으로 채워 맞춘다.
+    """
+    for _ in range(ANCHOR_WAIT_TRIES):
+        anchor = (verify(usage_id) or {}).get("anchor") or {}
+        if anchor.get("tx_hash"):
+            _query(
+                """
+                UPDATE usage_history
+                SET blockchain_tx_hash = %s, blockchain_block_number = %s,
+                    blockchain_block_hash = %s, blockchain_transaction_index = %s
+                WHERE usage_id = %s
+                """,
+                (
+                    anchor["tx_hash"],
+                    anchor.get("block_number"),
+                    anchor.get("block_hash"),
+                    anchor.get("transaction_index"),
+                    usage_id,
+                ),
+                fetch=False,
+            )
+            return
+        time.sleep(ANCHOR_WAIT_SEC)
+
+    raise RuntimeError(f"이력 {usage_id}이 체인에 기록되지 않았다")
 
 
 def _record_movement(nfc_token: str) -> None:
@@ -245,9 +293,10 @@ def hijacked_rpc(rules: list[rpc_proxy.Rule]):
 # --- 시나리오 실행 -----------------------------------------------------------
 
 
-def _result(scenario: Scenario, payload: dict, detail: str = "") -> Result:
+def _result(scenario: Scenario, payload: dict, detail: str = "", run: int = 1) -> Result:
     status = payload.get("verification_status", "unknown")
     return Result(
+        run=run,
         number=scenario.number,
         tier=scenario.tier,
         name=scenario.name,
@@ -266,16 +315,16 @@ def _result(scenario: Scenario, payload: dict, detail: str = "") -> Result:
     )
 
 
-def _run_rerecord(scenario: Scenario, usage_id: int) -> Result:
+def _run_rerecord(scenario: Scenario, usage_id: int, run: int) -> Result:
     """같은 식별자에 다른 원문을 기록하려 시도한다. 컨트랙트가 거절해야 한다."""
     record = fetch_usage_record_for_chain(usage_id)
     record = {**record, "checkoutLocation": "위조된 구역"}
     ok, stdout, stderr = run_besu_script("record-usage-record.mjs", stdin_payload=json.dumps(record))
     detail = (stderr or stdout or "").strip().splitlines()[-1] if (stderr or stdout) else ""
-    return _result(scenario, {"verification_status": "rejected" if not ok else "accepted"}, detail[:160])
+    return _result(scenario, {"verification_status": "rejected" if not ok else "accepted"}, detail[:160], run)
 
 
-def _run_unanchored(scenario: Scenario, usage_id: int) -> Result:
+def _run_unanchored(scenario: Scenario, usage_id: int, run: int) -> Result:
     """체인 기록이 없는 완료 이력을 만든다 — 블록체인이 멈춘 동안 생긴 이력에 해당한다."""
     new_id = _query(
         """
@@ -297,43 +346,45 @@ def _run_unanchored(scenario: Scenario, usage_id: int) -> Result:
         (usage_id,),
     )[0][0]
     try:
-        return _result(scenario, verify(new_id))
+        return _result(scenario, verify(new_id), run=run)
     finally:
         _query("DELETE FROM usage_history WHERE usage_id = %s", (new_id,), fetch=False)
 
 
-def run_scenario(scenario: Scenario, usage_id: int) -> Result:
+def run_scenario(scenario: Scenario, usage_id: int, run: int = 1) -> Result:
     if scenario.kind == "baseline":
-        return _result(scenario, verify(usage_id))
+        return _result(scenario, verify(usage_id), run=run)
 
     if scenario.kind in {"anchored", "display", "anchor_meta"}:
         with tampered(usage_id, scenario.column, scenario.value):
-            return _result(scenario, verify(usage_id))
+            return _result(scenario, verify(usage_id), run=run)
 
     if scenario.kind == "proxy":
         with hijacked_rpc(scenario.rules(anchor_of(usage_id))) as proxy:
             payload = verify(usage_id)
-        return _result(scenario, payload, f"위조한 메서드: {','.join(sorted(set(proxy.tampered))) or '없음'}")
+        return _result(scenario, payload, f"위조한 메서드: {','.join(sorted(set(proxy.tampered))) or '없음'}", run)
 
     if scenario.kind == "rerecord":
-        return _run_rerecord(scenario, usage_id)
+        return _run_rerecord(scenario, usage_id, run)
 
     if scenario.kind == "unanchored":
-        return _run_unanchored(scenario, usage_id)
+        return _run_unanchored(scenario, usage_id, run)
 
     raise RuntimeError(f"알 수 없는 시나리오 종류: {scenario.kind}")
 
 
-def run(out_csv: Path, *, progress=None) -> list[Result]:
+def run(out_csv: Path, *, repeat: int = 1, progress=None) -> list[Result]:
     reserve_usage_id_range()
-    usage_id = create_anchored_usage()
 
     results = []
-    for scenario in SCENARIOS:
-        result = run_scenario(scenario, usage_id)
-        results.append(result)
-        if progress:
-            progress(result)
+    for index in range(repeat):
+        # 회차마다 다른 장비와 직원을 써서, 한 이력에만 성립하는 우연을 걸러낸다.
+        usage_id = create_anchored_usage(variant=index)
+        for scenario in SCENARIOS:
+            result = run_scenario(scenario, usage_id, run=index + 1)
+            results.append(result)
+            if progress:
+                progress(result)
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", newline="", encoding="utf-8") as handle:
@@ -350,6 +401,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m eval.integrity", description="무결성 검증 평가")
     parser.add_argument("--out", type=Path, default=Path("eval/runs/latest/integrity.csv"))
     parser.add_argument(
+        "--repeat",
+        type=int,
+        default=10,
+        help="시나리오를 반복할 이력 수. 회차마다 다른 장비와 직원을 쓴다",
+    )
+    parser.add_argument(
         "--consensus",
         action="store_true",
         help="검증 노드를 실제로 내려 정족수 성질을 확인한다 (시나리오 14·15)",
@@ -359,15 +416,24 @@ def main(argv: list[str] | None = None) -> None:
     started = dt.datetime.now()
 
     def progress(result: Result) -> None:
-        mark = "✓" if result.matched else "✗"
-        print(
-            f"  {mark} {result.number:>2} [{result.tier}] {result.name:<28} "
-            f"기대 {result.expected:<7} 실제 {result.status}",
-            flush=True,
-        )
+        if result.number != SCENARIOS[0].number:
+            return
+        print(f"  {result.run}회차 — 시나리오 {len(SCENARIOS)}종", end="", flush=True)
 
-    print(f"무결성 시나리오 {len(SCENARIOS)}종", flush=True)
-    results = run(args.out, progress=progress)
+    print(f"무결성 시나리오 {len(SCENARIOS)}종 × {args.repeat}건", flush=True)
+    results = run(args.out, repeat=args.repeat, progress=progress)
+    print()
+
+    # 시나리오별로 몇 회차에서 기대와 일치했는지 모은다.
+    for scenario in SCENARIOS:
+        matching = [result for result in results if result.number == scenario.number]
+        passed = sum(1 for result in matching if result.matched)
+        statuses = sorted({result.status for result in matching})
+        mark = "✓" if passed == len(matching) else "✗"
+        print(
+            f"  {mark} {scenario.number:>2} [{scenario.tier}] {scenario.name:<28} "
+            f"{passed}/{len(matching)} · {','.join(statuses)}"
+        )
 
     if args.consensus:
         from eval import consensus

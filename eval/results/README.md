@@ -8,7 +8,7 @@
 | `run.json` | 시드, 커밋 해시, 시뮬레이션 시작 시각, 전파 상수, 행 수 |
 | `results_decisions.csv` | 1단계 판정 축 735조합 (24시간 구간) |
 | `results_aggregations.csv` | 2단계 집계 축 240행 (09~12시 구간) |
-| `integrity.csv` | 무결성 시나리오 13종의 판정 (합의 실증 2종은 CSV에 담기지 않는다) |
+| `integrity.csv` | 무결성 시나리오 13종 × 이력 10건의 판정 130행 (합의 실증 2종은 CSV에 담기지 않는다) |
 
 한 행은 파라미터 7개와 지표 6개, 표본 수로 이루어진다. 두 단계는 구간이 다르므로
 절대값을 서로 비교하지 않는다 — 1단계는 참값 전환 524건, 2단계는 124건 위에서 계산된다.
@@ -27,10 +27,11 @@ python -m eval.positioning sweep
 
 ```bash
 bash scripts/dev-up.sh            # 백엔드·DB·Besu가 모두 떠 있어야 한다
-python -m eval.integrity --consensus
+python -m eval.integrity --repeat 10 --consensus
 ```
 
-한 행은 시나리오 하나다. `expected`는 기대한 결론, `status`는 구현이 돌려준 판정
+한 행은 회차 하나의 시나리오 하나다. `run`이 회차이고, 회차마다 다른 장비와 직원을
+써서 대여 구역과 이동 경로가 달라진다 — 한 이력에만 성립하는 우연을 걸러내기 위함이다. `expected`는 기대한 결론, `status`는 구현이 돌려준 판정
 상태, `matched`는 둘이 맞는지다. 계층별 통과 여부(`db_matches_onchain`,
 `db_matches_event`, `tx_input_matches_db`, `tx_sender_matches`,
 `transactions_root_matches`)가 함께 실려 어느 계층이 잡았는지를 읽을 수 있다.
