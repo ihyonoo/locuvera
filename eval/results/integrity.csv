@@ -1,0 +1,14 @@
+number,tier,name,expected,status,matched,catches,mismatch_fields,db_matches_onchain,db_matches_event,tx_input_matches_db,tx_sender_matches,transactions_root_matches,tx_included_in_block,detail
+1,A,대여자 식별자 변조,불일치,db_mismatch,True,컨트랙트 상태,checkoutUserId,False,,,,,,불일치 필드: checkoutUserId
+2,A,반납 시각 변조,불일치,db_mismatch,True,컨트랙트 상태,returnedAt,False,,,,,,불일치 필드: returnedAt
+3,A,이동 경로 변조,불일치,db_mismatch,True,컨트랙트 상태,movementPath,False,,,,,,불일치 필드: movementPath
+4,A,장비명 변조 — 표시용,검증됨,verified,True,없음 — 기록 대상이 아님,,True,,True,True,True,True,
+5,B,트랜잭션 해시 변조,불일치,transaction_missing,True,앵커 해석,,True,,,,,,
+6,B,블록 번호 변조 — 지목 수단,검증됨,verified,True,없음 — 영수증에서 다시 찾는다,,True,,True,True,True,True,
+7,C,컨트랙트 상태 응답 위조,불일치,db_mismatch,True,이벤트 로그,returnUserId,False,,,,,,위조한 메서드: eth_call
+8,C,상태 + 이벤트 로그 위조,불일치,db_mismatch,True,트랜잭션 입력,returnUserId,False,,,,,,위조한 메서드: eth_call
+9,C,트랜잭션 입력 위조,불일치,tx_sender_mismatch,True,서명 · 머클 루트,,True,,,False,False,True,위조한 메서드: eth_getBlockByHash
+10,C,블록 트랜잭션 목록 위조,불일치,tx_not_in_block,True,머클 루트,,True,,,,False,False,위조한 메서드: eth_getBlockByHash
+11,—,동일 식별자로 재기록 시도,요청 거절,rejected,True,컨트랙트 자체,,,,,,,,"execution reverted: ""usageId already recorded"" (action=""estimateGas"", data=""0x08c379a000000000000000000000000000000000000000000000000000000000000000200000000000"
+12,—,체인에 기록되지 않은 이력,검증 불가,onchain_missing,True,해당 없음,,,,,,,,
+13,—,정상 이력 — 변조 없음,검증됨,verified,True,오탐 확인,,True,,True,True,True,True,
