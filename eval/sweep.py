@@ -21,8 +21,8 @@ from pathlib import Path
 from backend.location_decision import DecisionParams
 from eval import dataset, metrics, trace
 from eval.aggregate import reaggregate
-from eval.positioning import Observation, replay_dataset, replay_transitions
-from simulation.reader import AGGREGATORS, DEFAULT_AGGREGATE, SEND_EVERY_SEC, WINDOW_SEC
+from eval.positioning import replay_dataset
+from simulation.reader import AGGREGATORS
 
 HYST_DB_GRID = (0, 2, 4, 6, 8, 10, 12)
 DWELL_SEC_GRID = (0, 1, 2, 3, 5)
@@ -98,68 +98,45 @@ def _row(params: DecisionParams, aggregation: Aggregation, result: metrics.Metri
 
 
 _TRACE_PATH: Path | None = None
-_DATA: dataset.Dataset | None = None
-_TRUTH: list[metrics.TruthSample] | None = None
-_HEARD: set[tuple[str, int]] | None = None
-_DECISIONS: list[DecisionParams] | None = None
-
-CURRENT_AGGREGATION = Aggregation((WINDOW_SEC, SEND_EVERY_SEC, DEFAULT_AGGREGATE))
 
 
-def _init_worker(trace_path: str, decisions: list[DecisionParams] | None = None) -> None:
-    """워커마다 한 번만 트레이스를 압축 배열로 올린다.
-
-    객체로 올리면 워커 하나가 수 GB를 쓰고, 조합마다 SQLite를 다시 읽으면 1,355만 행을
-    735번 읽게 된다. 압축해서 한 번만 올리면 둘 다 사라진다.
-    """
-    global _TRACE_PATH, _DATA, _DECISIONS
+def _init_worker(trace_path: str) -> None:
+    global _TRACE_PATH
     _TRACE_PATH = Path(trace_path)
-    _DECISIONS = decisions
-    _DATA = dataset.load(_TRACE_PATH)
 
 
-def _run_decision(params: DecisionParams) -> Row:
-    result = metrics.compute_dataset(_DATA, replay_dataset(_DATA, params))
-    return _row(params, CURRENT_AGGREGATION, result)
+def _dataset_for(aggregation: Aggregation) -> dataset.Dataset:
+    """해당 집계 설정으로 관측을 다시 만들고 압축본으로 담는다."""
+    window_sec, send_every_sec, aggregate = aggregation
+    connection = trace.open_trace(_TRACE_PATH)
+    try:
+        return dataset.build(
+            (
+                (o.recv_ts, o.reader_id, o.tag_id, o.rssi)
+                for o in reaggregate(
+                    trace.read_raw_samples(connection),
+                    window_sec=window_sec,
+                    send_every_sec=send_every_sec,
+                    aggregate=aggregate,
+                )
+            ),
+            lambda horizon: connection.execute(
+                "SELECT ts, tag_id, zone_a, zone_b FROM truth WHERE ts <= ? ORDER BY tag_id, ts", (horizon,)
+            ),
+        )
+    finally:
+        connection.close()
 
 
 def _run_aggregation(aggregation: Aggregation) -> list[Row]:
-    window_sec, send_every_sec, aggregate = aggregation
-    connection = trace.open_trace(_TRACE_PATH)
-    observations: list[Observation] = list(
-        reaggregate(
-            trace.read_raw_samples(connection),
-            window_sec=window_sec,
-            send_every_sec=send_every_sec,
-            aggregate=aggregate,
-        )
-    )
-    connection.close()
-
-    if not observations:
+    """집계 설정 하나를 고정하고 판정 격자 전체를 돌린다."""
+    data = _dataset_for(aggregation)
+    if not data.observation_count:
         return []
-
-    # 원시 표본은 트레이스의 앞부분 구간만 남기므로, 참값도 같은 구간으로 자른다.
-    horizon = max(observation.recv_ts for observation in observations)
-    truth = [
-        metrics.TruthSample(
-            ts=entry.ts[position],
-            tag_id=_DATA.tags.names[index],
-            zone_a=_DATA.zones.names[entry.zone_a[position]],
-            zone_b=_DATA.zones.names[entry.zone_b[position]],
-            progress=0.0,
-        )
-        for index, entry in enumerate(_DATA.truth)
-        for position in range(len(entry.ts))
-        if entry.ts[position] <= horizon
+    return [
+        _row(params, aggregation, metrics.compute_dataset(data, replay_dataset(data, params)))
+        for params in decision_grid()
     ]
-    heard = {(observation.tag_id, observation.recv_ts) for observation in observations}
-
-    rows = []
-    for params in _DECISIONS:
-        transitions = replay_transitions(observations, params)
-        rows.append(_row(params, aggregation, metrics.compute(truth, transitions, heard=heard)))
-    return rows
 
 
 def _write(out_csv: Path, rows: list[Row]) -> None:
@@ -175,42 +152,24 @@ def _workers(requested: int | None) -> int:
     return requested or max(1, (os.cpu_count() or 2) - 1)
 
 
-def run_decisions(trace_path: Path, out_csv: Path, *, workers: int | None = None) -> list[Row]:
-    """1단계 — 집계는 현행에 고정하고 판정 축을 전탐색한다."""
+def run(trace_path: Path, out_csv: Path, *, workers: int | None = None, progress=None) -> list[Row]:
+    """집계 격자와 판정 격자를 완전 교차한다.
+
+    두 축은 서로 간섭한다 — 리더가 앞에서 잡음을 많이 걸러 보내면 서버 쪽 억제는 느슨해도
+    되고, 날것에 가깝게 보내면 빡빡해야 한다. 한쪽을 고정하고 고른 최적이 다른 쪽에서도
+    최적이라는 보장이 없으므로 전부 교차한다.
+
+    작업 단위는 집계 설정 하나다. 재집계 결과를 압축본으로 한 번 만들어 두고 그 위에서
+    판정 격자를 돌리므로, 재집계가 조합마다 반복되지 않는다.
+    """
+    grid = aggregation_grid()
+    rows: list[Row] = []
     with Pool(_workers(workers), initializer=_init_worker, initargs=(str(trace_path),)) as pool:
-        rows = pool.map(_run_decision, decision_grid())
+        for done, batch in enumerate(pool.imap_unordered(_run_aggregation, grid), start=1):
+            rows.extend(batch)
+            if progress:
+                progress(done, len(grid), len(rows))
+
+    rows.sort(key=lambda r: (r.window_sec, r.send_every_sec, r.aggregate, r.hyst_db, r.dwell_sec, r.stale_sec))
     _write(out_csv, rows)
     return rows
-
-
-def run_aggregations(
-    trace_path: Path,
-    out_csv: Path,
-    decisions: list[DecisionParams],
-    *,
-    workers: int | None = None,
-) -> list[Row]:
-    """2단계 — 1단계에서 고른 판정 조합만 들고 집계 축을 교차한다."""
-    with Pool(_workers(workers), initializer=_init_worker, initargs=(str(trace_path), decisions)) as pool:
-        batches = pool.map(_run_aggregation, aggregation_grid())
-    rows = [row for batch in batches for row in batch]
-    _write(out_csv, rows)
-    return rows
-
-
-def top_decisions(rows: list[Row], count: int) -> list[DecisionParams]:
-    """정지 정확도가 높은 순으로 판정 조합을 고른다."""
-    ranked = sorted(
-        (row for row in rows if row.rest_accuracy is not None),
-        key=lambda row: row.rest_accuracy,
-        reverse=True,
-    )
-    return [
-        DecisionParams(
-            hyst_db=row.hyst_db,
-            dwell_sec=row.dwell_sec,
-            stale_sec=row.stale_sec,
-            decay_db_per_sec=row.decay_db_per_sec,
-        )
-        for row in ranked[:count]
-    ]
