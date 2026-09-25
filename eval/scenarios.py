@@ -28,11 +28,18 @@ class Scenario:
     expected: str
     catches: str
     kind: str
+    # 공격 목적. 은폐는 변조를 정상으로 통과시키려는 것이고, 훼손은 정상 기록을
+    # 변조된 것처럼 보이게 만들려는 것이다. 증거가 목적인 시스템에서는 둘 다 공격이다.
+    goal: str = "은폐"
     # 등급 A·B — 바꿀 컬럼과 값을 만드는 함수
     column: str | None = None
     value: Callable[[object], object] | None = None
     # 등급 C — 프록시에 걸 규칙을 만드는 함수 (앵커 정보를 받는다)
     rules: Callable[[dict], list[rpc_proxy.Rule]] | None = None
+    # 데이터베이스 값을 체인에 실린 정수로 옮긴다. 프록시가 그 값을 찾아 바꿔야 한다.
+    chain_value: Callable[[object], int] | None = None
+    # 앵커 메타를 비워 이벤트 로그 경로를 타게 한다.
+    clear_anchor: bool = False
     notes: str = ""
 
 
@@ -50,6 +57,16 @@ def _blank_movement(_current):
 
 def _rename(current):
     return f"{current}(변조)"
+
+
+def _epoch(value) -> int:
+    """반납 시각을 체인에 실린 에포크 정수로 옮긴다.
+
+    데이터베이스는 EXTRACT(EPOCH ...)::BIGINT로 꺼내는데 numeric을 bigint로 캐스팅하면
+    반올림된다. 파이썬의 int()는 버림이라, 소수부가 0.5를 넘는 시각에서 1초씩 어긋나
+    프록시가 바꿀 값을 찾지 못한다.
+    """
+    return round(value.timestamp())
 
 
 def _other_user(current):
@@ -136,7 +153,10 @@ SCENARIOS: list[Scenario] = [
         "불일치",
         "이벤트 로그",
         "proxy",
-        rules=lambda anchor: [rpc_proxy.Rule("eth_call", rpc_proxy.replace_field(1, 999))],
+        rules=lambda ctx: [rpc_proxy.Rule("eth_call", rpc_proxy.replace_field(1, 999))],
+        goal="훼손",
+        notes="정상 기록이 불일치로 표시된다 — 훼손 공격은 성공한다. "
+        "검증 결과만으로는 DB 변조와 노드의 거짓말을 구분하지 못한다.",
     ),
     Scenario(
         8,
@@ -145,10 +165,11 @@ SCENARIOS: list[Scenario] = [
         "불일치",
         "트랜잭션 입력",
         "proxy",
-        rules=lambda anchor: [
+        rules=lambda ctx: [
             rpc_proxy.Rule("eth_call", rpc_proxy.replace_field(1, 999)),
             rpc_proxy.Rule("eth_getLogs", rpc_proxy.drop_results()),
         ],
+        goal="훼손",
     ),
     Scenario(
         9,
@@ -157,10 +178,15 @@ SCENARIOS: list[Scenario] = [
         "불일치",
         "서명 · 머클 루트",
         "proxy",
-        rules=lambda anchor: [
-            rpc_proxy.Rule("eth_getBlockByHash", rpc_proxy.patch_transaction_input(anchor["tx_hash"], "0xdeadbeef")),
-            rpc_proxy.Rule("eth_getBlockByNumber", rpc_proxy.patch_transaction_input(anchor["tx_hash"], "0xdeadbeef")),
+        rules=lambda ctx: [
+            rpc_proxy.Rule(
+                "eth_getBlockByHash", rpc_proxy.patch_transaction_input(ctx["anchor"]["tx_hash"], "0xdeadbeef")
+            ),
+            rpc_proxy.Rule(
+                "eth_getBlockByNumber", rpc_proxy.patch_transaction_input(ctx["anchor"]["tx_hash"], "0xdeadbeef")
+            ),
         ],
+        goal="훼손",
     ),
     Scenario(
         10,
@@ -169,10 +195,11 @@ SCENARIOS: list[Scenario] = [
         "불일치",
         "머클 루트",
         "proxy",
-        rules=lambda anchor: [
-            rpc_proxy.Rule("eth_getBlockByHash", rpc_proxy.drop_transaction(anchor["tx_hash"])),
-            rpc_proxy.Rule("eth_getBlockByNumber", rpc_proxy.drop_transaction(anchor["tx_hash"])),
+        rules=lambda ctx: [
+            rpc_proxy.Rule("eth_getBlockByHash", rpc_proxy.drop_transaction(ctx["anchor"]["tx_hash"])),
+            rpc_proxy.Rule("eth_getBlockByNumber", rpc_proxy.drop_transaction(ctx["anchor"]["tx_hash"])),
         ],
+        goal="훼손",
     ),
     Scenario(
         11,
@@ -200,6 +227,75 @@ SCENARIOS: list[Scenario] = [
         "오탐 확인",
         "baseline",
         notes="검증기가 무차별로 불일치를 뱉지 않음을 보인다.",
+    ),
+    Scenario(
+        16,
+        "C",
+        "상태를 변조에 맞춰 위조",
+        "불일치",
+        "트랜잭션 입력",
+        "conceal",
+        column="returned_at",
+        value=_shift_seconds(600),
+        chain_value=_epoch,
+        rules=lambda ctx: [rpc_proxy.Rule("eth_call", rpc_proxy.replace_word(ctx["before"], ctx["after"]))],
+        notes="컨트랙트 상태 계층은 통과한다. 서명된 호출 원본이 남아 있어 다음 계층이 잡는다. "
+        "변조 대상으로 반납 시각을 쓰는 이유는, 작은 정수는 ABI 인코딩의 구조 워드와 값이 겹쳐 "
+        "엉뚱한 자리까지 바뀌기 때문이다.",
+    ),
+    Scenario(
+        17,
+        "C",
+        "상태 + 입력까지 위조",
+        "불일치",
+        "서명",
+        "conceal",
+        column="returned_at",
+        value=_shift_seconds(600),
+        chain_value=_epoch,
+        rules=lambda ctx: [
+            rpc_proxy.Rule("eth_call", rpc_proxy.replace_word(ctx["before"], ctx["after"])),
+            rpc_proxy.Rule(
+                "eth_getBlockByHash",
+                rpc_proxy.patch_transaction_word(ctx["anchor"]["tx_hash"], ctx["before"], ctx["after"]),
+            ),
+            rpc_proxy.Rule(
+                "eth_getBlockByNumber",
+                rpc_proxy.patch_transaction_word(ctx["anchor"]["tx_hash"], ctx["before"], ctx["after"]),
+            ),
+        ],
+        notes="입력을 고치면 서명이 깨진다. 개인키가 없으면 여기서 막힌다.",
+    ),
+    Scenario(
+        18,
+        "C",
+        "앵커를 지우고 상태 위조",
+        "불일치",
+        "이벤트 로그 · 트랜잭션 입력",
+        "conceal",
+        column="returned_at",
+        value=_shift_seconds(600),
+        chain_value=_epoch,
+        clear_anchor=True,
+        rules=lambda ctx: [rpc_proxy.Rule("eth_call", rpc_proxy.replace_word(ctx["before"], ctx["after"]))],
+        notes="앵커가 없으면 검증이 이벤트 로그로 트랜잭션을 찾는다. 평소에는 타지 않는 경로다.",
+    ),
+    Scenario(
+        19,
+        "C",
+        "앵커를 지우고 상태·이벤트 위조",
+        "불일치",
+        "트랜잭션 입력",
+        "conceal",
+        column="returned_at",
+        value=_shift_seconds(600),
+        chain_value=_epoch,
+        clear_anchor=True,
+        rules=lambda ctx: [
+            rpc_proxy.Rule("eth_call", rpc_proxy.replace_word(ctx["before"], ctx["after"])),
+            rpc_proxy.Rule("eth_getLogs", rpc_proxy.drop_results()),
+        ],
+        notes="이벤트까지 지우면 앵커를 찾지 못한다.",
     ),
 ]
 

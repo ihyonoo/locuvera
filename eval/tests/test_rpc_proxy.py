@@ -139,3 +139,32 @@ class TestTampering:
             assert int(call(proxy.url, "eth_call")["result"][2:66], 16) == 7
             assert call(proxy.url, "eth_getLogs", request_id=2)["result"] == []
             assert proxy.tampered == ["eth_call", "eth_getLogs"]
+
+
+class TestValueMatchedTampering:
+    """은폐 공격은 변조한 데이터베이스 값에 맞춰 체인 응답을 꾸며야 한다."""
+
+    def test_a_word_is_replaced_wherever_it_appears(self, upstream):
+        rules = [rpc_proxy.Rule("eth_call", rpc_proxy.replace_word(22, 77))]
+        with rpc_proxy.TamperingProxy(upstream.url, rules) as proxy:
+            result = call(proxy.url, "eth_call")["result"]
+
+        assert int(result[2:66], 16) == 11, "다른 값을 가진 워드는 그대로여야 한다"
+        assert int(result[66:130], 16) == 77
+
+    def test_a_value_that_is_absent_changes_nothing(self, upstream):
+        rules = [rpc_proxy.Rule("eth_call", rpc_proxy.replace_word(5555, 1))]
+        with rpc_proxy.TamperingProxy(upstream.url, rules) as proxy:
+            assert call(proxy.url, "eth_call")["result"] == upstream.answers["eth_call"]
+
+    def test_the_transaction_input_keeps_its_selector(self, upstream):
+        upstream.answers["eth_getBlockByHash"]["transactions"][0]["input"] = (
+            "0xabcdef12" + format(22, "064x") + format(33, "064x")
+        )
+        rules = [rpc_proxy.Rule("eth_getBlockByHash", rpc_proxy.patch_transaction_word("0xaa", 22, 99))]
+        with rpc_proxy.TamperingProxy(upstream.url, rules) as proxy:
+            patched = call(proxy.url, "eth_getBlockByHash")["result"]["transactions"][0]["input"]
+
+        assert patched.startswith("0xabcdef12"), "함수 선택자는 건드리지 않는다"
+        assert int(patched[10:74], 16) == 99
+        assert int(patched[74:138], 16) == 33
