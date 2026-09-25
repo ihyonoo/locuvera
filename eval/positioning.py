@@ -98,34 +98,24 @@ def _parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(prog="python -m eval.positioning", description="측위 판정 평가")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    collect = sub.add_parser("collect", help="가상 병원을 돌려 관측·참값 트레이스를 남긴다")
+    collect = sub.add_parser("collect", help="가상 병원을 돌려 관측·참값·원시 트레이스를 남긴다")
     collect.add_argument("--hours", type=float, default=24.0)
-    collect.add_argument("--raw-hours", type=float, default=1.0, help="집계 이전 표본을 남길 앞 구간")
+    collect.add_argument("--raw-hours", type=float, default=24.0, help="집계 이전 표본을 남길 앞 구간")
     collect.add_argument("--seed", type=int, default=20260920)
     collect.add_argument("--start", default="2026-09-21T00:00", help="시뮬레이션 속 시작 시각(KST)")
     collect.add_argument("--out", type=Path, default=Path("eval/runs/latest/trace.sqlite"))
 
-    sweep = sub.add_parser("sweep", help="트레이스에 파라미터 격자를 적용해 결과 CSV를 쓴다")
+    sweep = sub.add_parser("sweep", help="집계 격자와 판정 격자를 완전 교차해 결과 CSV를 쓴다")
     sweep.add_argument("--trace", type=Path, default=Path("eval/runs/latest/trace.sqlite"))
-    sweep.add_argument("--out-dir", type=Path, default=Path("eval/runs/latest"))
-    sweep.add_argument("--stage", choices=("decisions", "aggregations", "all"), default="all")
-    sweep.add_argument("--top", type=int, default=5, help="2단계로 넘길 판정 조합 수")
+    sweep.add_argument("--out", type=Path, default=Path("eval/runs/latest/results.csv"))
     sweep.add_argument("--workers", type=int, default=None)
 
     return parser.parse_args(argv)
 
 
-def _describe(label: str, row) -> str:
-    return (
-        f"  {label} {row.hyst_db}dB/{row.dwell_sec}초/{row.stale_sec}초"
-        f"/감쇠 {row.decay_db_per_sec}"
-        f" — 정지 정확도 {row.rest_accuracy:.4f}, 전환 지연 p50 {row.delay_p50}"
-        f", 오전환 {row.false_switch_per_hour:.1f}회/시간"
-    )
-
-
 def main(argv: list[str] | None = None) -> None:
     import datetime as dt
+    import time
 
     args = _parse_args(argv)
 
@@ -142,58 +132,35 @@ def main(argv: list[str] | None = None) -> None:
 
     from eval import sweep
 
-    rows = []
-    if args.stage in ("decisions", "all"):
-        out = args.out_dir / "results_decisions.csv"
-        rows = sweep.run_decisions(args.trace, out, workers=args.workers)
-        print(f"1단계 판정 축: {out} ({len(rows)}조합)")
+    started = time.time()
 
-        current = next(
-            (r for r in rows if (r.hyst_db, r.dwell_sec, r.stale_sec, r.decay_db_per_sec) == (8, 2, 5, 0.0)),
-            None,
+    def progress(done: int, total: int, rows: int) -> None:
+        elapsed = time.time() - started
+        eta = elapsed / done * (total - done)
+        print(
+            f"  집계 {done:>2}/{total} · 누적 {rows:,}행 · 경과 {elapsed / 60:.0f}분 · 남음 {eta / 60:.0f}분",
+            flush=True,
         )
-        if current is not None:
-            print(_describe("현행", current))
-        best = max((r for r in rows if r.rest_accuracy is not None), key=lambda r: r.rest_accuracy, default=None)
-        if best is not None:
-            print(_describe("최고", best))
 
-    if args.stage in ("aggregations", "all"):
-        import csv as _csv
+    print(f"완전 교차 {len(sweep.aggregation_grid())} × {len(sweep.decision_grid())} 조합", flush=True)
+    rows = sweep.run(args.trace, args.out, workers=args.workers, progress=progress)
+    print(f"결과: {args.out} ({len(rows):,}행)")
 
-        if not rows:
-            with (args.out_dir / "results_decisions.csv").open(encoding="utf-8") as handle:
-                rows = [sweep.Row(**_coerce(record)) for record in _csv.DictReader(handle)]
-
-        decisions = sweep.top_decisions(rows, args.top)
-        out = args.out_dir / "results_aggregations.csv"
-        produced = sweep.run_aggregations(args.trace, out, decisions, workers=args.workers)
-        print(f"2단계 집계 축: {out} ({len(produced)}행)")
+    ranked = [r for r in rows if r.rest_accuracy is not None]
+    if not ranked:
+        return
+    best = max(ranked, key=lambda r: r.rest_accuracy)
+    print(f"  정지 정확도 최고 {_describe(best)}")
+    fewest = min(ranked, key=lambda r: r.missed_transitions)
+    print(f"  놓친 전환 최소 {_describe(fewest)}")
 
 
-def _coerce(record: dict) -> dict:
-    """CSV에서 읽은 문자열을 Row의 타입으로 되돌린다."""
-    numeric = {
-        "hyst_db": int,
-        "dwell_sec": int,
-        "stale_sec": int,
-        "missed_transitions": int,
-        "rest_samples": int,
-        "move_samples": int,
-        "true_transitions": int,
-        "judged_transitions": int,
-    }
-    out = {}
-    for key, value in record.items():
-        if key == "aggregate":
-            out[key] = value
-        elif value == "":
-            out[key] = None
-        elif key in numeric:
-            out[key] = numeric[key](value)
-        else:
-            out[key] = float(value)
-    return out
+def _describe(row) -> str:
+    return (
+        f"{row.window_sec:g}초·{row.aggregate} / {row.hyst_db}dB·{row.dwell_sec:g}초·{row.stale_sec:g}초"
+        f"·감쇠{row.decay_db_per_sec:g}"
+        f" — 정확도 {row.rest_accuracy:.4f} · 놓침 {row.missed_transitions}"
+    )
 
 
 if __name__ == "__main__":
