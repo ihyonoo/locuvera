@@ -43,6 +43,9 @@ BESU_RPC_URL = os.environ.get("BESU_RPC_URL", "http://127.0.0.1:8549")
 # 시작하는데 체인에는 예전 기록이 남아 있어, 그대로 쓰면 재기록 거절에 걸린다.
 USAGE_ID_BASE = 900_000
 
+# 대여·이동·반납 시각이 서로 다른 초에 찍히도록 벌려 둔다.
+SPACING_SEC = 2
+
 # 블록 주기가 30초라, 기록이 확정될 때까지 한 주기 이상 기다려야 할 때가 있다.
 ANCHOR_WAIT_TRIES = 4
 ANCHOR_WAIT_SEC = 20
@@ -56,6 +59,7 @@ class Result:
     run: int
     number: int
     tier: str
+    goal: str
     name: str
     expected: str
     status: str
@@ -144,7 +148,11 @@ def create_anchored_usage(variant: int = 0) -> int:
     if status != 200:
         raise RuntimeError(f"/usage/checkout 실패: {status} {body}")
 
+    # 대여·이동·반납이 같은 초에 일어나면 체인 레코드 안에서 세 시각이 같은 값이 된다.
+    # 은폐 시나리오는 반납 시각만 골라 바꿔야 하므로, 값이 겹치면 엉뚱한 자리까지 바뀐다.
+    time.sleep(SPACING_SEC)
     _record_movement(nfc_token)
+    time.sleep(SPACING_SEC)
 
     status, body = api("POST", "/usage/return", staff, {"nfc_token": nfc_token})
     if status != 200:
@@ -276,6 +284,31 @@ def tampered(usage_id: int, column: str, value):
 
 
 @contextlib.contextmanager
+def anchor_cleared(usage_id: int):
+    """앵커 메타를 비웠다 되돌린다 — 검증이 이벤트 로그로 트랜잭션을 찾게 만든다."""
+    columns = (
+        "blockchain_tx_hash",
+        "blockchain_block_number",
+        "blockchain_block_hash",
+        "blockchain_transaction_index",
+    )
+    before = _query(f"SELECT {', '.join(columns)} FROM usage_history WHERE usage_id = %s", (usage_id,))[0]
+    _query(
+        f"UPDATE usage_history SET {', '.join(f'{name} = NULL' for name in columns)} WHERE usage_id = %s",
+        (usage_id,),
+        fetch=False,
+    )
+    try:
+        yield
+    finally:
+        _query(
+            f"UPDATE usage_history SET {', '.join(f'{name} = %s' for name in columns)} WHERE usage_id = %s",
+            (*before, usage_id),
+            fetch=False,
+        )
+
+
+@contextlib.contextmanager
 def hijacked_rpc(rules: list[rpc_proxy.Rule]):
     """검증이 체인에 묻는 답을 프록시가 바꾼다 — RPC 노드를 장악한 공격자."""
     with rpc_proxy.TamperingProxy(BESU_RPC_URL, rules) as proxy:
@@ -299,6 +332,7 @@ def _result(scenario: Scenario, payload: dict, detail: str = "", run: int = 1) -
         run=run,
         number=scenario.number,
         tier=scenario.tier,
+        goal=scenario.goal,
         name=scenario.name,
         expected=scenario.expected,
         status=status,
@@ -351,6 +385,28 @@ def _run_unanchored(scenario: Scenario, usage_id: int, run: int) -> Result:
         _query("DELETE FROM usage_history WHERE usage_id = %s", (new_id,), fetch=False)
 
 
+def _run_conceal(scenario: Scenario, usage_id: int, run: int) -> Result:
+    """데이터베이스를 변조하고, 체인 응답을 그 변조에 맞춰 위조한다.
+
+    은폐를 노리는 공격자가 실제로 해야 하는 일이다. 컨트랙트 상태 계층을 통과시킨 뒤
+    나머지 계층이 잡아내는지를 본다.
+    """
+    stored = _query(f"SELECT {scenario.column} FROM usage_history WHERE usage_id = %s", (usage_id,))[0][0]
+    changed = scenario.value(stored)
+    to_chain = scenario.chain_value or int
+    context = {"anchor": anchor_of(usage_id), "before": to_chain(stored), "after": to_chain(changed)}
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(tampered(usage_id, scenario.column, scenario.value))
+        if scenario.clear_anchor:
+            stack.enter_context(anchor_cleared(usage_id))
+        proxy = stack.enter_context(hijacked_rpc(scenario.rules(context)))
+        payload = verify(usage_id)
+
+    detail = f"{context['before']}→{context['after']} · 위조 {','.join(sorted(set(proxy.tampered))) or '없음'}"
+    return _result(scenario, payload, detail, run)
+
+
 def run_scenario(scenario: Scenario, usage_id: int, run: int = 1) -> Result:
     if scenario.kind == "baseline":
         return _result(scenario, verify(usage_id), run=run)
@@ -360,9 +416,13 @@ def run_scenario(scenario: Scenario, usage_id: int, run: int = 1) -> Result:
             return _result(scenario, verify(usage_id), run=run)
 
     if scenario.kind == "proxy":
-        with hijacked_rpc(scenario.rules(anchor_of(usage_id))) as proxy:
+        context = {"anchor": anchor_of(usage_id)}
+        with hijacked_rpc(scenario.rules(context)) as proxy:
             payload = verify(usage_id)
         return _result(scenario, payload, f"위조한 메서드: {','.join(sorted(set(proxy.tampered))) or '없음'}", run)
+
+    if scenario.kind == "conceal":
+        return _run_conceal(scenario, usage_id, run)
 
     if scenario.kind == "rerecord":
         return _run_rerecord(scenario, usage_id, run)
@@ -431,7 +491,7 @@ def main(argv: list[str] | None = None) -> None:
         statuses = sorted({result.status for result in matching})
         mark = "✓" if passed == len(matching) else "✗"
         print(
-            f"  {mark} {scenario.number:>2} [{scenario.tier}] {scenario.name:<28} "
+            f"  {mark} {scenario.number:>2} [{scenario.tier}] {scenario.goal} · {scenario.name:<24} "
             f"{passed}/{len(matching)} · {','.join(statuses)}"
         )
 

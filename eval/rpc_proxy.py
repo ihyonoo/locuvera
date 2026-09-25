@@ -139,6 +139,46 @@ def replace_field(index: int, value: object) -> Callable[[object, list], object]
     return apply
 
 
+def replace_word(old: int, new: int) -> Callable[[object, list], object]:
+    """ABI 인코딩 응답에서 특정 값을 가진 32바이트 워드를 모두 바꾼다.
+
+    구조체 안의 몇 번째 자리인지 몰라도 되고, 변조한 데이터베이스 값에 맞춰 체인 응답을
+    꾸밀 때 쓴다 — 은폐를 노리는 공격자가 실제로 해야 하는 일이다.
+    """
+
+    def apply(result, _params):
+        if not isinstance(result, str) or not result.startswith("0x"):
+            return result
+        return "0x" + _swap_words(result[2:], old, new)
+
+    return apply
+
+
+def patch_transaction_word(tx_hash: str, old: int, new: int) -> Callable[[object, list], object]:
+    """블록 응답 안 해당 트랜잭션의 입력에서 특정 값을 가진 워드를 바꾼다."""
+
+    def apply(result, _params):
+        if not isinstance(result, dict) or not isinstance(result.get("transactions"), list):
+            return result
+        transactions = []
+        for tx in result["transactions"]:
+            if isinstance(tx, dict) and _same(tx.get("hash"), tx_hash) and isinstance(tx.get("input"), str):
+                selector, body = tx["input"][:10], tx["input"][10:]
+                transactions.append({**tx, "input": selector + _swap_words(body, old, new)})
+            else:
+                transactions.append(tx)
+        return {**result, "transactions": transactions}
+
+    return apply
+
+
+def _swap_words(body: str, old: int, new: int) -> str:
+    target = format(old, "064x")
+    replacement = format(new, "064x")
+    words = [body[offset : offset + 64] for offset in range(0, len(body), 64)]
+    return "".join(replacement if word.lower() == target else word for word in words)
+
+
 def drop_results() -> Callable[[object, list], object]:
     """이벤트 로그처럼 목록으로 오는 응답을 비운다."""
     return lambda result, _params: [] if isinstance(result, list) else result
