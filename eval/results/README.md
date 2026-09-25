@@ -8,6 +8,7 @@
 | `run.json` | 시드, 커밋 해시, 시뮬레이션 시작 시각, 전파 상수, 행 수 |
 | `results_decisions.csv` | 1단계 판정 축 735조합 (24시간 구간) |
 | `results_aggregations.csv` | 2단계 집계 축 240행 (09~12시 구간) |
+| `integrity.csv` | 무결성 시나리오 13종의 판정 (합의 실증 2종은 CSV에 담기지 않는다) |
 
 한 행은 파라미터 7개와 지표 6개, 표본 수로 이루어진다. 두 단계는 구간이 다르므로
 절대값을 서로 비교하지 않는다 — 1단계는 참값 전환 524건, 2단계는 124건 위에서 계산된다.
@@ -21,3 +22,21 @@ python -m eval.positioning sweep
 
 `run.json`의 시드와 커밋 해시가 같으면 같은 트레이스가 나온다. 수집 약 5분,
 스윕 약 70분(9워커 기준)이 걸린다.
+
+## 무결성
+
+```bash
+bash scripts/dev-up.sh            # 백엔드·DB·Besu가 모두 떠 있어야 한다
+python -m eval.integrity --consensus
+```
+
+한 행은 시나리오 하나다. `expected`는 기대한 결론, `status`는 구현이 돌려준 판정
+상태, `matched`는 둘이 맞는지다. 계층별 통과 여부(`db_matches_onchain`,
+`db_matches_event`, `tx_input_matches_db`, `tx_sender_matches`,
+`transactions_root_matches`)가 함께 실려 어느 계층이 잡았는지를 읽을 수 있다.
+
+`--consensus`는 검증 노드를 실제로 내렸다 올리므로 2분쯤 걸린다. 결과는 화면에만
+출력되고 CSV에는 담기지 않는다 — 판정이 아니라 성질의 실증이기 때문이다.
+
+시뮬레이터가 돌고 있으면 같은 Postgres에서 경합이 나 결과가 흔들린다. 평가 중에는
+내려 둔다.
