@@ -130,7 +130,9 @@ class TestIngestContract:
 
     def test_resting_equipment_is_located_at_its_home_zone(self, client, seeded_hospital, monkeypatch):
         instance = world.World(rng=random.Random(2), now=1000.0)
-        _pump_ingest(instance, client, monkeypatch, start=1000.0, seconds=8.0)
+        # 예열은 WINDOW_SEC(5초)만큼 창이 차고 DWELL_SEC(3초)만큼 체류가 확정될 시간을
+        # 넘겨야 한다. 8초는 그 합과 같아 여유가 없으므로 두 배를 준다.
+        _pump_ingest(instance, client, monkeypatch, start=1000.0, seconds=16.0)
         headers = _any_staff_headers(seeded_hospital)
 
         located = 0
