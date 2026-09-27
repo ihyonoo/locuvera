@@ -29,7 +29,8 @@ class TestBuildPayload:
         assert window.build_payload(now=100.5)["observations"][0]["count"] == 10
 
     def test_drops_samples_older_than_the_window(self):
-        window = reader.ReaderWindow("M203")
+        # 창 길이를 명시한다 — 기본값을 조정해도 이 테스트가 검증하는 만료 규칙은 그대로다.
+        window = reader.ReaderWindow("M203", window_sec=2.0)
         window.add("EQ-0001", -90.0, at=100.0)
         window.add("EQ-0001", -60.0, at=103.0)
         observation = window.build_payload(now=103.5)["observations"][0]
