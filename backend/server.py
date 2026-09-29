@@ -1558,14 +1558,16 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
     is_admin = user["role"] == "admin"
     now = int(time.time())
     reader_locations = load_reader_location_map()
+    active_tag_ids = load_active_tag_ids()
     cached_locations = load_all_cached_tag_locations()
-    db_locations = load_latest_db_tag_locations()
 
-    merged_locations = dict(db_locations)
-    merged_locations.update(cached_locations)
-
-    missing_cache_keys = set(db_locations.keys()) - set(cached_locations.keys())
-    if missing_cache_keys:
+    if cached_locations is None:
+        # Redis 장애 — 이력 전체 스캔으로 폴백
+        merged_locations = load_latest_db_tag_locations()
+    else:
+        # 평소 — 캐시에 없는 활성 태그만 DB에서 태그별 최신 1건 조회 후 캐시에 채운다
+        db_locations = load_latest_db_tag_locations(active_tag_ids - cached_locations.keys())
+        # NX: 조회 사이 /ingest가 쓴 더 새 위치를 덮어쓰지 않는다
         cache_location_updates(
             {
                 tag_id: (
@@ -1574,15 +1576,15 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
                     location["changed_at"],
                 )
                 for tag_id, location in db_locations.items()
-                if tag_id in missing_cache_keys
-                and location.get("reader_id")
-                and isinstance(location.get("changed_at"), int)
+                if location.get("reader_id") and isinstance(location.get("changed_at"), int)
             },
             reader_locations=reader_locations,
+            only_if_missing=True,
         )
+        merged_locations = {**db_locations, **cached_locations}
 
     # 전체 활성 태그 로스터 = (등록된 활성 태그) ∪ (위치가 잡힌 태그)
-    roster_tag_ids = load_active_tag_ids() | set(merged_locations.keys())
+    roster_tag_ids = active_tag_ids | set(merged_locations.keys())
     tag_metadata = load_tag_metadata(roster_tag_ids)
     tag_last_seen = load_tags_last_seen(roster_tag_ids)
 

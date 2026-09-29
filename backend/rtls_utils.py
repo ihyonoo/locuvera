@@ -130,15 +130,16 @@ def read_cached_tag_location(tag_id: str) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
-def load_all_cached_tag_locations() -> dict[str, dict]:
+def load_all_cached_tag_locations() -> dict[str, dict] | None:
+    # None = Redis 장애(호출자가 DB 전체 조회로 폴백), {} = Redis는 살아 있고 키가 없음
     client = get_redis_client()
     if client is None:
-        return {}
+        return None
 
     try:
         keys = list(client.scan_iter(match=f"{REDIS_LOCATION_KEY_PREFIX}*:current"))
     except Exception:
-        return {}
+        return None
 
     if not keys:
         return {}
@@ -146,7 +147,7 @@ def load_all_cached_tag_locations() -> dict[str, dict]:
     try:
         raw_values = client.mget(keys)
     except Exception:
-        return {}
+        return None
 
     results: dict[str, dict] = {}
     for raw in raw_values:
@@ -195,20 +196,43 @@ def fetch_latest_db_tag_location(tag_id: str) -> dict | None:
     }
 
 
-def load_latest_db_tag_locations() -> dict[str, dict]:
-    sql = """
-    SELECT DISTINCT ON (h.tag_id)
-      h.tag_id,
-      h.reader_id,
-      COALESCE(r.location_name, h.reader_id) AS location,
-      EXTRACT(EPOCH FROM h.decided_at)::BIGINT AS updated_at_epoch
-    FROM tag_state_history h
-    LEFT JOIN readers r ON r.reader_id = h.reader_id
-    ORDER BY h.tag_id, h.decided_at DESC
-    """
+def load_latest_db_tag_locations(tag_ids: set[str] | None = None) -> dict[str, dict]:
+    # None = 전체 태그(이력 전체 스캔), 집합 = 해당 태그만 인덱스로 최신 1건씩
+    if tag_ids is not None and not tag_ids:
+        return {}
+    if tag_ids is None:
+        sql = """
+        SELECT DISTINCT ON (h.tag_id)
+          h.tag_id,
+          h.reader_id,
+          COALESCE(r.location_name, h.reader_id) AS location,
+          EXTRACT(EPOCH FROM h.decided_at)::BIGINT AS updated_at_epoch
+        FROM tag_state_history h
+        LEFT JOIN readers r ON r.reader_id = h.reader_id
+        ORDER BY h.tag_id, h.decided_at DESC
+        """
+        params = None
+    else:
+        sql = """
+        SELECT
+          t.tag_id,
+          h.reader_id,
+          COALESCE(r.location_name, h.reader_id) AS location,
+          EXTRACT(EPOCH FROM h.decided_at)::BIGINT AS updated_at_epoch
+        FROM unnest(%s::text[]) AS t(tag_id)
+        CROSS JOIN LATERAL (
+          SELECT reader_id, decided_at
+          FROM tag_state_history
+          WHERE tag_id = t.tag_id
+          ORDER BY decided_at DESC
+          LIMIT 1
+        ) h
+        LEFT JOIN readers r ON r.reader_id = h.reader_id
+        """
+        params = (list(tag_ids),)
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, params)
             rows = cur.fetchall()
     except Exception:
         raise HTTPException(500, "실시간 위치 목록 조회 중 데이터베이스 오류가 발생했습니다.")
@@ -229,6 +253,7 @@ def cache_tag_location_snapshot(
     reader_id: str,
     changed_at_epoch: int,
     reader_locations: dict[str, str] | None = None,
+    only_if_missing: bool = False,
 ) -> None:
     client = get_redis_client()
     if client is None:
@@ -242,12 +267,17 @@ def cache_tag_location_snapshot(
         "changed_at": changed_at_epoch,
     }
     with contextlib.suppress(Exception):
-        client.set(get_tag_location_cache_key(tag_id), json.dumps(payload, ensure_ascii=False))
+        client.set(
+            get_tag_location_cache_key(tag_id),
+            json.dumps(payload, ensure_ascii=False),
+            nx=only_if_missing,
+        )
 
 
 def cache_location_updates(
     updates: dict[str, tuple[str, int | None, int]],
     reader_locations: dict[str, str] | None = None,
+    only_if_missing: bool = False,
 ) -> None:
     for tag_id, (reader_id, _last_rssi, changed_at_epoch) in updates.items():
         cache_tag_location_snapshot(
@@ -255,6 +285,7 @@ def cache_location_updates(
             reader_id,
             changed_at_epoch,
             reader_locations=reader_locations,
+            only_if_missing=only_if_missing,
         )
 
 
