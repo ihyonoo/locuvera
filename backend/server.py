@@ -1562,8 +1562,8 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
     cached_locations = load_all_cached_tag_locations()
 
     if cached_locations is None:
-        # Redis 장애 — 이력 전체 스캔으로 폴백
-        merged_locations = load_latest_db_tag_locations()
+        # Redis 장애 — 활성 태그 전부를 DB에서 태그별 최신 1건으로 조회
+        merged_locations = load_latest_db_tag_locations(active_tag_ids)
     else:
         # 평소 — 캐시에 없는 활성 태그만 DB에서 태그별 최신 1건 조회 후 캐시에 채운다
         db_locations = load_latest_db_tag_locations(active_tag_ids - cached_locations.keys())

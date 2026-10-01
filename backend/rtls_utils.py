@@ -196,43 +196,29 @@ def fetch_latest_db_tag_location(tag_id: str) -> dict | None:
     }
 
 
-def load_latest_db_tag_locations(tag_ids: set[str] | None = None) -> dict[str, dict]:
-    # None = 전체 태그(이력 전체 스캔), 집합 = 해당 태그만 인덱스로 최신 1건씩
-    if tag_ids is not None and not tag_ids:
+def load_latest_db_tag_locations(tag_ids: set[str]) -> dict[str, dict]:
+    # 태그마다 (tag_id, decided_at DESC) 인덱스로 최신 1건만 읽는다 — 비용이 이력 규모와 무관하다
+    if not tag_ids:
         return {}
-    if tag_ids is None:
-        sql = """
-        SELECT DISTINCT ON (h.tag_id)
-          h.tag_id,
-          h.reader_id,
-          COALESCE(r.location_name, h.reader_id) AS location,
-          EXTRACT(EPOCH FROM h.decided_at)::BIGINT AS updated_at_epoch
-        FROM tag_state_history h
-        LEFT JOIN readers r ON r.reader_id = h.reader_id
-        ORDER BY h.tag_id, h.decided_at DESC
-        """
-        params = None
-    else:
-        sql = """
-        SELECT
-          t.tag_id,
-          h.reader_id,
-          COALESCE(r.location_name, h.reader_id) AS location,
-          EXTRACT(EPOCH FROM h.decided_at)::BIGINT AS updated_at_epoch
-        FROM unnest(%s::text[]) AS t(tag_id)
-        CROSS JOIN LATERAL (
-          SELECT reader_id, decided_at
-          FROM tag_state_history
-          WHERE tag_id = t.tag_id
-          ORDER BY decided_at DESC
-          LIMIT 1
-        ) h
-        LEFT JOIN readers r ON r.reader_id = h.reader_id
-        """
-        params = (list(tag_ids),)
+    sql = """
+    SELECT
+      t.tag_id,
+      h.reader_id,
+      COALESCE(r.location_name, h.reader_id) AS location,
+      EXTRACT(EPOCH FROM h.decided_at)::BIGINT AS updated_at_epoch
+    FROM unnest(%s::text[]) AS t(tag_id)
+    CROSS JOIN LATERAL (
+      SELECT reader_id, decided_at
+      FROM tag_state_history
+      WHERE tag_id = t.tag_id
+      ORDER BY decided_at DESC
+      LIMIT 1
+    ) h
+    LEFT JOIN readers r ON r.reader_id = h.reader_id
+    """
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-            cur.execute(sql, params)
+            cur.execute(sql, (list(tag_ids),))
             rows = cur.fetchall()
     except Exception:
         raise HTTPException(500, "실시간 위치 목록 조회 중 데이터베이스 오류가 발생했습니다.")

@@ -1,8 +1,7 @@
 """GET /rtls/live가 태그별 최신 위치를 Redis에서 먼저 읽는지 검증한다.
 
-Redis가 살아 있으면 tag_state_history 전체 스캔(load_latest_db_tag_locations(None))을
-돌리지 않고, 캐시에 없는 활성 태그만 DB에서 태그별로 조회해 캐시에 채운다.
-Redis가 죽었을 때만 전체 스캔으로 폴백한다.
+Redis가 살아 있으면 캐시에 없는 활성 태그만 DB에서 태그별로 조회해 캐시에 채운다.
+Redis가 죽어도 tag_state_history 전체 스캔은 하지 않고, 활성 태그 전부를 태그별로 조회한다.
 """
 
 import datetime as dt
@@ -23,12 +22,12 @@ READER_LOCATIONS = {"M999": "테스트 리더", "M998": "다른 리더"}
 
 @pytest.fixture
 def forbid_full_scan(monkeypatch):
-    """전체 이력 스캔이 호출되면 실패시킨다. 태그 지정 조회는 그대로 통과시킨다."""
+    """태그를 지정하지 않은 조회(이력 전체 스캔)가 다시 생기면 실패시킨다."""
     real = server.load_latest_db_tag_locations
 
     def guarded(tag_ids=None):
         if tag_ids is None:
-            raise AssertionError("Redis가 살아 있는데 tag_state_history 전체 스캔이 실행됐다")
+            raise AssertionError("tag_state_history 전체 스캔이 실행됐다")
         return real(tag_ids)
 
     monkeypatch.setattr(server, "load_latest_db_tag_locations", guarded)
@@ -104,8 +103,8 @@ class TestRtlsLiveCacheFirst:
         # 위치가 한 번도 잡힌 적 없는 태그는 위치 없이 목록에 남는다.
         assert items["EQ-TEST-0002"]["reader_id"] is None
 
-    def test_redis_down_falls_back_to_full_db_scan(
-        self, client, db_conn, seed_readers, seed_tag, seed_user, monkeypatch
+    def test_redis_down_uses_per_tag_lookup_not_full_scan(
+        self, client, db_conn, seed_readers, seed_tag, seed_user, forbid_full_scan, monkeypatch
     ):
         seed_tag("EQ-TEST-0001")
         _insert_history(db_conn, "EQ-TEST-0001", "M998", 1_700_000_100)
