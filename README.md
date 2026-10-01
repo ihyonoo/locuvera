@@ -2,6 +2,8 @@
 
 IoT 기반 실내 의료 장비 실시간 위치 추적, 블록체인 기반 사용 이력 무결성 검증 시스템
 
+> **Locuvera**(로쿠베라)는 라틴어 *locus*(장소)와 *vera*(참된)를 합친 이름이다. 장비가 있는 곳을 알려 주고, 그 사용 기록이 참임을 증명한다.
+
 [![Live](https://img.shields.io/badge/Live-mediledger.xyz-38C172?style=for-the-badge&logo=cloudflare&logoColor=white)](https://mediledger.xyz)
 
 - 의료 장비에 BLE iBeacon 태그 부착, BLE 리더가 신호 세기(RSSI) 보고, 백엔드가 장비의 현재 위치 산출
