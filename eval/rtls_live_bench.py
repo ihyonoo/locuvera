@@ -629,7 +629,8 @@ def main(argv: list[str] | None = None) -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     run_cmd = commands.add_parser("run")
     run_cmd.add_argument("--before", default="aa53d61")
-    run_cmd.add_argument("--after", default="ded8e05")
+    # #64 스쿼시 머지 커밋. 결과를 잰 ded8e05와 backend/가 같다
+    run_cmd.add_argument("--after", default="211e410")
     run_cmd.add_argument("--sizes", type=int, nargs="+", default=DEFAULT_SIZES)
     run_cmd.add_argument("--clients", type=int, nargs="+", default=DEFAULT_CLIENTS)
     plot_cmd = commands.add_parser("plot")
