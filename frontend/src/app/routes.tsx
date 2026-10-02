@@ -14,7 +14,6 @@ import IntegrityVerification from './pages/IntegrityVerification';
 import NfcMapping from './pages/NfcMapping';
 import NfcEquipment from './pages/NfcEquipment';
 import DeviceStatus from './pages/DeviceStatus';
-import AiReport from './pages/AiReport';
 
 export const router = createBrowserRouter([
   {
@@ -72,10 +71,6 @@ export const router = createBrowserRouter([
   {
     path: '/admin/nfc-mapping',
     Component: NfcMapping,
-  },
-  {
-    path: '/admin/ai-report',
-    Component: AiReport,
   },
   {
     path: '/nfc/:token',
