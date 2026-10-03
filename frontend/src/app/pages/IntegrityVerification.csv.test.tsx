@@ -285,6 +285,22 @@ describe('IntegrityVerification CSV export', () => {
     expect(row).toContain('김도윤 · 정형외과 · 전공의');
   });
 
+  it('neutralizes formula-like text, including leading whitespace and control characters', async () => {
+    mockFetch([
+      buildItem({
+        equipment: { tag_id: TAG_ID, name: '\t=1+1' },
+        checkout: { reader_id: 'M101', location: '  @SUM(1)', at: 1_700_000_000 },
+        user: { name: '+cmd', position: '수간호사', department: '응급의학과' },
+      }),
+    ]);
+    renderPage();
+
+    const [, row] = await downloadCsv();
+    expect(row).toContain("'\t=1+1");
+    expect(row).toContain("'  @SUM(1)");
+    expect(row).toContain("'+cmd · 응급의학과 · 수간호사");
+  });
+
   it('writes the locations, movement path and timestamps', async () => {
     renderPage();
 

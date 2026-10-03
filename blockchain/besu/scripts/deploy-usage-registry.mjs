@@ -1,37 +1,37 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import solc from "solc";
-import { ethers } from "ethers";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import solc from 'solc';
+import { ethers } from 'ethers';
+import { requirePrivateKey, requireSenderAddress } from './besu-keys.mjs';
 
-const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CONTRACT_PATH = path.join(ROOT_DIR, "contracts", "UsageRecordRegistry.sol");
-const DEPLOYMENT_PATH = path.join(ROOT_DIR, "deployments", "usage-registry.json");
-const RPC_URL = process.env.BESU_RPC_URL ?? "http://127.0.0.1:8549";
-const CHAIN_ID = Number(process.env.BESU_CHAIN_ID ?? "1337");
-const DEPLOYER_PRIVATE_KEY =
-  process.env.BESU_DEPLOYER_PRIVATE_KEY ??
-  "ae6ae8e5ccbfb04590405997ee2d52d2b330726137b875053c36d94e974d162f";
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CONTRACT_PATH = path.join(ROOT_DIR, 'contracts', 'UsageRecordRegistry.sol');
+const DEPLOYMENT_PATH = path.join(ROOT_DIR, 'deployments', 'usage-registry.json');
+const RPC_URL = process.env.BESU_RPC_URL ?? 'http://127.0.0.1:8549';
+const CHAIN_ID = Number(process.env.BESU_CHAIN_ID ?? '1337');
+const DEPLOYER_PRIVATE_KEY = requirePrivateKey('BESU_DEPLOYER_PRIVATE_KEY');
+const RECORDER_ADDRESS = requireSenderAddress();
 
 function compileContract() {
-  const source = fs.readFileSync(CONTRACT_PATH, "utf8");
+  const source = fs.readFileSync(CONTRACT_PATH, 'utf8');
   const input = {
-    language: "Solidity",
+    language: 'Solidity',
     sources: {
-      "UsageRecordRegistry.sol": {
+      'UsageRecordRegistry.sol': {
         content: source,
       },
     },
     settings: {
-      evmVersion: "berlin",
+      evmVersion: 'berlin',
       optimizer: {
         enabled: true,
         runs: 200,
       },
       viaIR: true,
       outputSelection: {
-        "*": {
-          "*": ["abi", "evm.bytecode.object"],
+        '*': {
+          '*': ['abi', 'evm.bytecode.object'],
         },
       },
     },
@@ -39,19 +39,19 @@ function compileContract() {
 
   const output = JSON.parse(solc.compile(JSON.stringify(input)));
   const errors = output.errors ?? [];
-  const fatalErrors = errors.filter((item) => item.severity === "error");
+  const fatalErrors = errors.filter((item) => item.severity === 'error');
 
   if (fatalErrors.length > 0) {
-    throw new Error(fatalErrors.map((item) => item.formattedMessage).join("\n"));
+    throw new Error(fatalErrors.map((item) => item.formattedMessage).join('\n'));
   }
 
-  return output.contracts["UsageRecordRegistry.sol"].UsageRecordRegistry;
+  return output.contracts['UsageRecordRegistry.sol'].UsageRecordRegistry;
 }
 
 async function main() {
   const compiled = compileContract();
   const provider = new ethers.JsonRpcProvider(RPC_URL, {
-    name: "besu-qbft",
+    name: 'besu-qbft',
     chainId: CHAIN_ID,
   });
   const wallet = new ethers.Wallet(DEPLOYER_PRIVATE_KEY, provider);
@@ -60,14 +60,14 @@ async function main() {
   console.log(`Deploying UsageRecordRegistry to ${RPC_URL} ...`);
   console.log(`deployer: ${wallet.address}`);
 
-  const contract = await factory.deploy({
-    gasPrice: ethers.parseUnits("1", "gwei"),
+  const contract = await factory.deploy(RECORDER_ADDRESS, {
+    gasPrice: ethers.parseUnits('1', 'gwei'),
     type: 0,
   });
   const deploymentTx = contract.deploymentTransaction();
 
   if (!deploymentTx) {
-    throw new Error("deployment transaction not found");
+    throw new Error('deployment transaction not found');
   }
 
   const receipt = await deploymentTx.wait();
@@ -77,13 +77,21 @@ async function main() {
     DEPLOYMENT_PATH,
     JSON.stringify(
       {
-        contractName: "UsageRecordRegistry",
+        contractName: 'UsageRecordRegistry',
         address: await contract.getAddress(),
         chainId: CHAIN_ID,
         rpcUrl: RPC_URL,
         deploymentTxHash: deploymentTx.hash,
         deploymentBlockNumber: receipt?.blockNumber ?? null,
         deployer: wallet.address,
+        recorder: RECORDER_ADDRESS,
+        recorderHistory: [
+          {
+            address: RECORDER_ADDRESS,
+            fromBlock: receipt?.blockNumber ?? 0,
+            fromTransactionIndex: receipt?.index ?? 0,
+          },
+        ],
       },
       null,
       2,
@@ -92,7 +100,7 @@ async function main() {
 
   console.log(`contract address: ${await contract.getAddress()}`);
   console.log(`deployment tx: ${deploymentTx.hash}`);
-  console.log(`deployment block: ${receipt?.blockNumber ?? "unknown"}`);
+  console.log(`deployment block: ${receipt?.blockNumber ?? 'unknown'}`);
   console.log(`saved deployment: ${DEPLOYMENT_PATH}`);
 }
 

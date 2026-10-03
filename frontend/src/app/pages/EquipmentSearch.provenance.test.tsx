@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import EquipmentSearch from './EquipmentSearch';
 
@@ -149,6 +149,40 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     await waitFor(() => expect(sidebar().queryByText('모의 수액펌프')).not.toBeInTheDocument());
     expect(liveRequests().at(-1)).toContain('hide_simulated=true');
     expect(sidebar().getByText('실물 제세동기')).toBeInTheDocument();
+  });
+
+  it('ignores an old live response after the simulation filter changes', async () => {
+    let releaseOld!: (value: unknown) => void;
+    const oldRequest = new Promise((resolve) => {
+      releaseOld = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (!String(url).includes('hide_simulated=true')) return oldRequest;
+        return Promise.resolve({ ok: true, status: 200, json: async () => livePayloadFor(String(url)) });
+      }),
+    );
+    renderPage();
+    await waitFor(() => expect(liveRequests()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    await sidebar().findByText('실물 제세동기');
+    await act(async () => {
+      releaseOld({ ok: true, status: 200, json: async () => livePayloadFor('http://localhost/rtls/live') });
+    });
+
+    expect(sidebar().queryByText('모의 수액펌프')).not.toBeInTheDocument();
+  });
+
+  it('waits for a live request to finish before polling again', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise(() => {})),
+    );
+    renderPage();
+    await waitFor(() => expect(liveRequests()).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 1150));
+    expect(liveRequests()).toHaveLength(1);
   });
 
   it('leaves the map undimmed while the toggle is off', async () => {

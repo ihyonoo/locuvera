@@ -22,12 +22,17 @@ from backend.ntag424 import derive_sdm_session_mac_key, derive_tag_key, parse_sd
 try:
     from tools.ntag.apdu import GET_ADDITIONAL_FRAME, GET_VERSION, SW_ADDITIONAL_FRAME, SW_OK, parse_uid_from_version
     from tools.ntag.crypto import build_sdm_file_settings
-    from tools.ntag.ndef import build_sdm_ndef_file
+    from tools.ntag.ndef import (
+        CMAC_PLACEHOLDER_LEN,
+        CTR_PLACEHOLDER_LEN,
+        UID_PLACEHOLDER_LEN,
+        build_sdm_ndef_file,
+    )
     from tools.ntag.session import AuthenticationError, CommandError, Ntag424Session
 except ModuleNotFoundError:
     from apdu import GET_ADDITIONAL_FRAME, GET_VERSION, SW_ADDITIONAL_FRAME, SW_OK, parse_uid_from_version
     from crypto import build_sdm_file_settings
-    from ndef import build_sdm_ndef_file
+    from ndef import CMAC_PLACEHOLDER_LEN, CTR_PLACEHOLDER_LEN, UID_PLACEHOLDER_LEN, build_sdm_ndef_file
     from session import AuthenticationError, CommandError, Ntag424Session
 
 FACTORY_KEY = bytes(16)
@@ -42,6 +47,16 @@ NEW_KEY_VERSION = 0x01
 def derive_key_for(master_key: bytes, uid_hex: str) -> bytes:
     """서버와 같은 파생을 쓴다 — 복제하지 않고 backend.ntag424를 그대로 부른다."""
     return derive_tag_key(master_key, bytes.fromhex(uid_hex))
+
+
+def matches_expected_ndef_url(actual: bytes, expected: bytes, offsets: dict[str, int]) -> bool:
+    if len(actual) != len(expected):
+        return False
+    normalized = bytearray(actual)
+    for name, length in (("uid", UID_PLACEHOLDER_LEN), ("ctr", CTR_PLACEHOLDER_LEN), ("cmac", CMAC_PLACEHOLDER_LEN)):
+        start = offsets[name]
+        normalized[start : start + length] = expected[start : start + length]
+    return bytes(normalized) == expected
 
 
 def verify_sdm_mirror(ndef_bytes: bytes, offsets: dict[str, int], sdm_file_read_key: bytes) -> tuple[bool, str, int]:
@@ -231,6 +246,10 @@ def main() -> int:
         reader.select_ndef_app()
         reader.select_ndef_file()
         mirrored = reader.read_binary(len(expected_ndef))
+
+        if not matches_expected_ndef_url(mirrored, expected_ndef, offsets):
+            print("태그 URL이 기대한 호스트·NFC 토큰과 다르다. 키 회전을 중단한다.", file=sys.stderr)
+            return 1
 
         ok, mirrored_uid, mirrored_ctr = verify_sdm_mirror(mirrored, offsets, FACTORY_KEY)
         if not ok:

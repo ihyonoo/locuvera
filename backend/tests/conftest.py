@@ -12,8 +12,18 @@ os.environ["REDIS_URL"] = "redis://127.0.0.1:6379/1"
 # NTAG 마스터키도 settings.py가 import 시점에 읽는다. 실물 태그 검증이 걸린 테스트가
 # .env의 유무에 따라 통과하다 말다 하지 않도록 여기서 고정한다.
 os.environ["NTAG_MASTER_KEY"] = "000102030405060708090A0B0C0D0E0F"
+os.environ["RTLS_REAL_READER_KEYS"] = (
+    '{"M501":"test-reader-key-32-bytes-000001",'
+    '"M503":"test-reader-key-32-bytes-000003",'
+    '"M504":"test-reader-key-32-bytes-000004"}'
+)
+os.environ["RTLS_SIM_KEY"] = "test-simulation-master-key-000001"
 
 import hashlib
+import hmac
+import json
+import secrets
+import time
 
 import psycopg
 import pytest
@@ -55,6 +65,7 @@ def _flush_location_cache():
         return
     with contextlib.suppress(Exception):
         keys = list(client.scan_iter(match=f"{REDIS_LOCATION_KEY_PREFIX}*"))
+        keys += list(client.scan_iter(match="rtls:auth:*"))
         if keys:
             client.delete(*keys)
 
@@ -79,6 +90,34 @@ def db_conn():
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+def post_signed_ingest(client, payload):
+    reader_id = payload["reader_id"]
+    with psycopg.connect(TEST_DATABASE_URL) as conn, conn.cursor() as cur:
+        cur.execute("SELECT is_real_hardware FROM readers WHERE reader_id = %s", (reader_id,))
+        row = cur.fetchone()
+    if row is None:
+        raise AssertionError(f"리더를 먼저 등록해야 합니다: {reader_id}")
+    if row[0]:
+        key = json.loads(os.environ["RTLS_REAL_READER_KEYS"])[reader_id].encode()
+    else:
+        key = hmac.new(
+            os.environ["RTLS_SIM_KEY"].encode(), f"rtls-sim-v1:{reader_id}".encode(), hashlib.sha256
+        ).digest()
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+    timestamp = str(int(time.time()))
+    nonce = secrets.token_hex(16)
+    message = f"v1\n{reader_id}\n{timestamp}\n{nonce}\n{hashlib.sha256(body).hexdigest()}".encode()
+    signature = hmac.new(key, message, hashlib.sha256).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-RTLS-Reader-ID": reader_id,
+        "X-RTLS-Timestamp": timestamp,
+        "X-RTLS-Nonce": nonce,
+        "X-RTLS-Signature": signature,
+    }
+    return client.post("/ingest", content=body, headers=headers)
 
 
 @pytest.fixture
@@ -138,17 +177,29 @@ def seed_user(db_conn):
         password: str | None = None,
         email: str | None = None,
         is_demo: bool = False,
+        can_manage_nfc: bool = False,
     ):
         password_hash = pwd.hash(password) if password else "x"
         with db_conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO users (username, display_name, role, position, password_hash,
-                                    is_active, email_verified, token_version, email, is_demo)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s)
+                                    is_active, email_verified, token_version, email, is_demo, can_manage_nfc)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s)
                 RETURNING user_id
                 """,
-                (username, username, role, position, password_hash, is_active, email_verified, email, is_demo),
+                (
+                    username,
+                    username,
+                    role,
+                    position,
+                    password_hash,
+                    is_active,
+                    email_verified,
+                    email,
+                    is_demo,
+                    can_manage_nfc,
+                ),
             )
             user_id = cur.fetchone()[0]
         db_conn.commit()

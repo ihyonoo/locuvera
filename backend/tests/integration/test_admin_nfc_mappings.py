@@ -1,6 +1,42 @@
 """NFC 매핑 목록 조회(/admin/nfc-mappings) 통합 테스트."""
 
 
+def test_new_admin_can_read_but_cannot_change_nfc_mapping(client, seed_user, seed_tag, db_conn):
+    _, headers = seed_user(username="new_admin", role="admin")
+    seed_tag(tag_id="EQ-MAP-001", nfc_token="pump-001")
+
+    assert client.get("/admin/nfc-mappings", headers=headers).status_code == 200
+    assert (
+        client.post(
+            "/admin/nfc-mappings",
+            json={"tag_id": "EQ-MAP-001", "nfc_token": "pump-002"},
+            headers=headers,
+        ).status_code
+        == 403
+    )
+    assert client.delete("/admin/nfc-mappings/EQ-MAP-001", headers=headers).status_code == 403
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT nfc_token FROM tags WHERE tag_id = 'EQ-MAP-001'")
+        assert cur.fetchone()[0] == "pump-001"
+
+
+def test_new_mapping_requires_consistent_slug_and_three_digit_number(client, seed_user, seed_tag):
+    _, headers = seed_user(username="nfc_writer", role="admin", can_manage_nfc=True)
+    seed_tag(tag_id="EQ-MAP-002")
+    for token in ("Pump-001", "pump%2D001", "pump-1", "pump_001", "123-001"):
+        response = client.post(
+            "/admin/nfc-mappings", json={"tag_id": "EQ-MAP-002", "nfc_token": token}, headers=headers
+        )
+        assert response.status_code == 400, token
+
+    response = client.post(
+        "/admin/nfc-mappings",
+        json={"tag_id": "EQ-MAP-002", "nfc_token": "infusion-pump-001"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+
 class TestListNfcMappings:
     def test_requires_admin_role(self, client, seed_user):
         _, headers = seed_user(username="staffer", role="staff")

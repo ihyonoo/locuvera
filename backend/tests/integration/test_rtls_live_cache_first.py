@@ -15,6 +15,7 @@ from backend.rtls_utils import (
     cache_tag_location_snapshot,
     get_redis_client,
     get_tag_location_cache_key,
+    get_tag_seen_cache_key,
 )
 
 READER_LOCATIONS = {"M999": "테스트 리더", "M998": "다른 리더"}
@@ -60,6 +61,52 @@ def _cached(tag_id):
 
 
 class TestRtlsLiveCacheFirst:
+    def test_db_failure_keeps_existing_location_and_seen_cache(
+        self, client, seed_readers, seed_tag, seed_user, monkeypatch
+    ):
+        seed_tag("EQ-TEST-0001")
+        cache_tag_location_snapshot("EQ-TEST-0001", "M999", 1_700_000_000, reader_locations=READER_LOCATIONS)
+        seen_key = get_tag_seen_cache_key("EQ-TEST-0001")
+        get_redis_client().set(seen_key, 1_700_000_001)
+        _, headers = seed_user(username="staffer")
+        real_load = server.load_active_tag_ids
+
+        def db_down(*_):
+            raise RuntimeError("DB down")
+
+        def failed_load():
+            with monkeypatch.context() as patch:
+                patch.setattr("backend.rtls_utils.psycopg.connect", db_down)
+                return real_load()
+
+        monkeypatch.setattr(server, "load_active_tag_ids", failed_load)
+
+        response = client.get("/rtls/live", headers=headers)
+
+        assert response.status_code == 503
+        assert _cached("EQ-TEST-0001") is not None
+        assert get_redis_client().get(seen_key) is not None
+
+    def test_stale_cache_does_not_restore_inactive_or_deleted_tags(
+        self, client, db_conn, seed_readers, seed_tag, seed_user
+    ):
+        seed_tag("EQ-INACTIVE")
+        seed_tag("EQ-DELETED")
+        for tag_id in ("EQ-INACTIVE", "EQ-DELETED"):
+            cache_tag_location_snapshot(tag_id, "M999", 1_700_000_000, reader_locations=READER_LOCATIONS)
+        with db_conn.cursor() as cur:
+            cur.execute("UPDATE tags SET is_active = FALSE WHERE tag_id = 'EQ-INACTIVE'")
+            cur.execute("DELETE FROM tags WHERE tag_id = 'EQ-DELETED'")
+        db_conn.commit()
+        _, headers = seed_user(username="staffer")
+
+        items = _live_items(client, headers)
+
+        assert "EQ-INACTIVE" not in items
+        assert "EQ-DELETED" not in items
+        assert _cached("EQ-INACTIVE") is None
+        assert _cached("EQ-DELETED") is None
+
     def test_all_cached_tags_are_served_without_full_scan(
         self, client, seed_readers, seed_tag, seed_user, forbid_full_scan
     ):

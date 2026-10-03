@@ -264,8 +264,9 @@ function formatDownloadTimestamp(date: Date) {
 
 function escapeCsvCell(value: string | number | null | undefined) {
   const text = value == null ? '' : String(value);
-  if (!/[",\n\r]/.test(text)) return text;
-  return `"${text.replace(/"/g, '""')}"`;
+  const safeText = /^[=+@-]/.test(text.replace(/^[\s\p{Cc}]*/u, '')) ? `'${text}` : text;
+  if (!/[",\n\r]/.test(safeText)) return safeText;
+  return `"${safeText.replace(/"/g, '""')}"`;
 }
 
 function getLocationLabel(location: string | null, readerId: string | null) {
@@ -690,6 +691,13 @@ export default function IntegrityVerification() {
   // 서버에 실제로 보낸 조회 조건. 이 값이 바뀔 때마다 한 페이지씩 다시 받아온다.
   const [query, setQuery] = useState<HistoryQuery>(DEFAULT_QUERY);
   const [items, setItems] = useState<UsageHistoryItem[]>([]);
+  const historyRequestId = useRef(0);
+  useEffect(
+    () => () => {
+      historyRequestId.current += 1;
+    },
+    [],
+  );
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -724,6 +732,7 @@ export default function IntegrityVerification() {
 
   const fetchHistory = useCallback(
     async (targetQuery: HistoryQuery) => {
+      const requestId = ++historyRequestId.current;
       setIsLoading(true);
       setError('');
       try {
@@ -742,6 +751,7 @@ export default function IntegrityVerification() {
           },
         );
         const payload = await response.json().catch(() => null);
+        if (requestId !== historyRequestId.current) return;
         if (response.status === 401 || response.status === 403) {
           logout();
           return;
@@ -754,10 +764,11 @@ export default function IntegrityVerification() {
         setTotal(typeof payload.total === 'number' ? payload.total : 0);
         setDetailUsageId(null);
       } catch (err) {
+        if (requestId !== historyRequestId.current) return;
         if (err instanceof Error) setError(err.message);
         else setError('사용 이력 무결성 검증 조회 중 오류가 발생했습니다.');
       } finally {
-        setIsLoading(false);
+        if (requestId === historyRequestId.current) setIsLoading(false);
       }
     },
     [logout],

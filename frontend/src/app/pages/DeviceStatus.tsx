@@ -48,8 +48,6 @@ export default function DeviceStatus() {
   });
   const [readers, setReaders] = useState<LiveReaderItem[]>([]);
   const [tags, setTags] = useState<LiveTagItem[]>([]);
-  const [readersOnline, setReadersOnline] = useState(0);
-  const [tagsOnline, setTagsOnline] = useState(0);
   const [error, setError] = useState('');
   const [hideSimulated, setHideSimulated] = useState(false);
 
@@ -82,8 +80,6 @@ export default function DeviceStatus() {
         if (cancelled) return;
         setReaders(Array.isArray(payload.readers) ? payload.readers : []);
         setTags(Array.isArray(payload.items) ? payload.items : []);
-        setReadersOnline(typeof payload.readers_online === 'number' ? payload.readers_online : 0);
-        setTagsOnline(typeof payload.tags_online === 'number' ? payload.tags_online : 0);
         setError('');
       } catch (err) {
         if (cancelled) return;
@@ -108,8 +104,10 @@ export default function DeviceStatus() {
     () => (hideSimulated ? tags.filter((t) => t.is_real_hardware !== false) : tags),
     [tags, hideSimulated],
   );
-  const readersTotal = readers.length;
-  const tagsTotal = tags.length;
+  const readersTotal = visibleReaders.length;
+  const tagsTotal = visibleTags.length;
+  const readersOnline = visibleReaders.filter((reader) => reader.is_online).length;
+  const tagsOnline = visibleTags.filter((tag) => tag.is_online).length;
   const sortedTags = useMemo(
     () => [...visibleTags].sort((a, b) => Number(b.is_online) - Number(a.is_online)),
     [visibleTags],

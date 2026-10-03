@@ -71,6 +71,17 @@ def get_tag_seen_cache_key(tag_id: str) -> str:
     return f"{REDIS_LOCATION_KEY_PREFIX}{tag_id}:seen"
 
 
+def delete_tag_caches(tag_ids: set[str]) -> None:
+    if not tag_ids:
+        return
+    client = get_redis_client()
+    if client is None:
+        return
+    keys = [key for tag_id in tag_ids for key in (get_tag_location_cache_key(tag_id), get_tag_seen_cache_key(tag_id))]
+    with contextlib.suppress(Exception):
+        client.delete(*keys)
+
+
 def mark_tags_seen(tag_ids: set[str], seen_epoch: int) -> None:
     if not tag_ids:
         return
@@ -275,31 +286,12 @@ def cache_location_updates(
         )
 
 
-def upsert_readers_from_ingest(reader_ids: set[str]) -> None:
-    if not reader_ids:
-        return
-
-    sql = """
-    INSERT INTO readers (reader_id, location_name, is_active, last_seen_at, created_at)
-    VALUES (%s, %s, TRUE, now(), now())
-    ON CONFLICT (reader_id) DO UPDATE
-    SET
-      location_name = COALESCE(readers.location_name, EXCLUDED.location_name),
-      is_active = TRUE,
-      last_seen_at = now()
-    """
-    with contextlib.suppress(Exception):
-        rows = [(reader_id, READER_LOCATION.get(reader_id, reader_id)) for reader_id in reader_ids]
-        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-            cur.executemany(sql, rows)
-
-
-def filter_registered_tag_ids(tag_ids: set[str]) -> set[str]:
+def filter_registered_tag_ids(tag_ids: set[str], *, strict: bool = False) -> set[str]:
     """자산으로 등록된 활성 태그만 남긴다.
 
     리더에는 UUID 필터가 없어 주변의 아무 iBeacon이나 /ingest로 올라온다. 이걸 받아주면
     메모리 상태·Redis 캐시·실시간 화면이 전부 오염되므로 입구에서 걸러낸다.
-    조회에 실패하면 빈 집합을 돌려준다 — 정체 모를 태그를 통과시키는 것보다 낫다.
+    strict=True일 때 조회 실패는 호출자에게 전파한다.
     """
     if not tag_ids:
         return set()
@@ -311,12 +303,16 @@ def filter_registered_tag_ids(tag_ids: set[str]) -> set[str]:
             )
             return {row[0] for row in cur.fetchall()}
     except Exception:
+        if strict:
+            raise
         return set()
 
 
 def insert_location_history(
     updates: dict[str, tuple[str, int | None, int]],
     known_tag_ids: set[str] | None = None,
+    *,
+    cursor=None,
 ) -> None:
     if not updates:
         return
@@ -339,8 +335,11 @@ def insert_location_history(
     ]
     if not rows:
         return
-    with contextlib.suppress(Exception), psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-        cur.executemany(sql, rows)
+    if cursor is None:
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            cur.executemany(sql, rows)
+    else:
+        cursor.executemany(sql, rows)
 
 
 def load_reader_location_map() -> dict[str, str]:
@@ -470,8 +469,8 @@ def load_active_tag_ids() -> set[str]:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()
-    except Exception:
-        return set()
+    except Exception as exc:
+        raise HTTPException(503, "활성 태그 조회 중 데이터베이스 오류가 발생했습니다.") from exc
     return {row[0] for row in rows}
 
 

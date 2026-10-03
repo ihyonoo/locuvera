@@ -10,6 +10,7 @@ import random
 
 import pytest
 
+from backend.tests.conftest import post_signed_ingest
 from eval.positioning import Observation, replay_transitions
 from simulation import demand, world
 from simulation.generate_seed import render_seed_sql
@@ -66,7 +67,7 @@ def _pump(instance, client, monkeypatch, trace, *, start, seconds, seq, only_tag
                         last_seen=observation["last_seen"],
                     )
                 )
-            assert client.post("/ingest", json={**payload, "observations": observations}).status_code == 200
+            assert post_signed_ingest(client, {**payload, "observations": observations}).status_code == 200
     return now, seq
 
 

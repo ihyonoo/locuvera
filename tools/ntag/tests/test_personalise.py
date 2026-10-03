@@ -155,3 +155,17 @@ class TestVerifySdmMirror:
         ok, _, _ = verify_sdm_mirror(blank, offsets, bytes(16))
 
         assert ok is False
+
+
+class TestNdefUrlBeforeRotation:
+    def test_rejects_same_length_wrong_host_or_token(self):
+        from tools.ntag.ndef import build_sdm_ndef_file
+        from tools.ntag.personalise import matches_expected_ndef_url
+
+        expected, offsets = build_sdm_ndef_file("https://mediledger.xyz", "pump-001")
+        wrong_host, _ = build_sdm_ndef_file("https://mediledger.abc", "pump-001")
+        wrong_token, _ = build_sdm_ndef_file("https://mediledger.xyz", "pump-002")
+
+        assert matches_expected_ndef_url(expected, expected, offsets)
+        assert not matches_expected_ndef_url(wrong_host, expected, offsets)
+        assert not matches_expected_ndef_url(wrong_token, expected, offsets)

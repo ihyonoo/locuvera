@@ -4,11 +4,13 @@
 어떤 항목이 모의인지 알려주는 is_real_hardware 필드는 직원에게 여전히 노출하지 않는다.
 """
 
+from backend.tests.conftest import post_signed_ingest
+
 
 def _ingest(client, reader_id, tag_id, rssi=-50):
-    response = client.post(
-        "/ingest",
-        json={
+    response = post_signed_ingest(
+        client,
+        {
             "reader_id": reader_id,
             "ts": 1000,
             "observations": [{"tag_id": tag_id, "rssi": rssi, "count": 1, "last_seen": 1000}],

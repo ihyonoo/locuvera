@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import IntegrityVerification from './IntegrityVerification';
 
@@ -150,5 +150,40 @@ describe('IntegrityVerification server-side pagination', () => {
 
     await waitFor(() => expect(screen.getByText('장비 01')).toBeInTheDocument());
     expect(historyRequests().at(-1)).toContain('offset=0');
+  });
+
+  it('ignores a slow response from an older page request', async () => {
+    let releaseSlow!: (value: unknown) => void;
+    const slow = new Promise((resolve) => {
+      releaseSlow = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (String(url).includes('offset=20')) return slow;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => (String(url).includes('/rtls/live') ? LIVE_PAYLOAD : historyPayloadFor(String(url))),
+        });
+      }),
+    );
+    renderPage();
+    await screen.findByText('장비 01');
+
+    fireEvent.click(screen.getByRole('button', { name: '3페이지' }));
+    await waitFor(() => expect(historyRequests().some((url) => url.includes('offset=20'))).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: '2페이지' }));
+    await screen.findByText('장비 11');
+    await act(async () => {
+      releaseSlow({
+        ok: true,
+        status: 200,
+        json: async () => historyPayloadFor('http://localhost/usage/history?limit=10&offset=20'),
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('장비 11')).toBeInTheDocument());
+    expect(screen.queryByText('장비 21')).not.toBeInTheDocument();
   });
 });

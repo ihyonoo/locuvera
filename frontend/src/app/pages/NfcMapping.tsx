@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import AppShell from '../components/layout/AppShell';
 import AdminNav from '../components/layout/AdminNav';
 import ResizableSidebar from '../components/layout/ResizableSidebar';
@@ -7,7 +7,7 @@ import { clampPage, DEFAULT_PAGE_SIZE, getPageSlice, getTotalPages } from '../li
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
-import { buildAuthHeaders, getStoredAuthSession, LOGIN_PATH } from '../lib/auth';
+import { buildAuthHeaders, getStoredAuthSession, storeAuthSession, LOGIN_PATH } from '../lib/auth';
 import { useAuthGuard, useLogout, useRunWhenReady } from '../lib/useAuthGuard';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { API_BASE_URL, PUBLIC_APP_URL } from '../lib/runtime';
@@ -140,6 +140,7 @@ function sortMappingItems(items: MappingItem[], sort: MappingSort): MappingItem[
 }
 
 const DEMO_NOTICE = '데모 체험 계정에서는 NFC 매핑을 변경할 수 없습니다.';
+const NFC_PERMISSION_NOTICE = 'NFC 매핑 변경 권한은 시스템 관리자에게 문의하세요.';
 
 const DEFAULT_MAPPING_FILTERS: MappingFilters = {
   equipmentName: '',
@@ -237,6 +238,7 @@ export default function NfcMapping() {
   });
   const [items, setItems] = useState<MappingItem[]>([]);
   const [draftTokens, setDraftTokens] = useState<Record<string, string>>({});
+  const [canManageNfc, setCanManageNfc] = useState(getStoredAuthSession()?.user?.can_manage_nfc === true);
   // 입력 중인 조건(draft)과 목록에 실제로 적용된 조건(applied)을 나눈다.
   // 타이핑할 때마다 목록이 흔들리지 않고, 검색을 눌러야 반영된다.
   const [draftFilters, setDraftFilters] = useState<MappingFilters>(DEFAULT_MAPPING_FILTERS);
@@ -256,12 +258,44 @@ export default function NfcMapping() {
 
   const logout = useLogout();
 
-  // 데모 계정은 매핑을 바꿀 수 없다(백엔드도 403). 요청을 보내기 전에 안내만 띄운다.
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const session = getStoredAuthSession();
+    if (!session?.token) return;
+    let active = true;
+    fetch(`${API_BASE_URL}/auth/me`, { headers: buildAuthHeaders(session.token) })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((payload) => {
+        if (!active || typeof payload?.user?.can_manage_nfc !== 'boolean') return;
+        storeAuthSession({ ...session, user: { ...session.user, ...payload.user } });
+        setCanManageNfc(payload.user.can_manage_nfc);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isAuthorized]);
+
+  // 변경 권한이 없는 계정은 요청 전에 안내한다.
   const blockedForDemo = () => {
-    if (getStoredAuthSession()?.user?.is_demo !== true) return false;
+    if (getStoredAuthSession()?.user?.is_demo === true) {
+      setNotice('');
+      setError(DEMO_NOTICE);
+      return true;
+    }
+    if (canManageNfc) return false;
     setNotice('');
-    setError(DEMO_NOTICE);
+    setError(NFC_PERMISSION_NOTICE);
     return true;
+  };
+
+  const revokeCachedNfcPermission = () => {
+    setCanManageNfc(false);
+    const session = getStoredAuthSession();
+    if (session) storeAuthSession({ ...session, user: { ...session.user, can_manage_nfc: false } });
   };
 
   const fetchMappings = useCallback(async () => {
@@ -289,12 +323,6 @@ export default function NfcMapping() {
 
       const nextItems = Array.isArray(payload.items) ? (payload.items as MappingItem[]) : [];
       setItems(nextItems);
-      setDraftTokens(
-        nextItems.reduce<Record<string, string>>((acc, item) => {
-          acc[item.tag_id] = item.nfc_token ?? '';
-          return acc;
-        }, {}),
-      );
     } catch (err) {
       if (err instanceof Error) setError(err.message);
       else setError('NFC 매핑 목록 조회 중 오류가 발생했습니다.');
@@ -355,7 +383,7 @@ export default function NfcMapping() {
 
   const saveMapping = async (tagId: string) => {
     if (blockedForDemo()) return;
-    const token = (draftTokens[tagId] ?? '').trim();
+    const token = (draftTokens[tagId] ?? items.find((item) => item.tag_id === tagId)?.nfc_token ?? '').trim();
     if (!token) {
       setError('저장할 NFC 토큰을 입력하세요.');
       return;
@@ -379,9 +407,13 @@ export default function NfcMapping() {
         }),
       });
       const payload = await response.json().catch(() => null);
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         logout();
         return;
+      }
+      if (response.status === 403) {
+        revokeCachedNfcPermission();
+        throw new Error(NFC_PERMISSION_NOTICE);
       }
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.detail ?? 'NFC 매핑 저장에 실패했습니다.');
@@ -389,6 +421,12 @@ export default function NfcMapping() {
 
       setNotice('NFC 매핑을 저장했습니다.');
       await fetchMappings();
+      setDraftTokens((current) => {
+        if (current[tagId]?.trim() !== token) return current;
+        const next = { ...current };
+        delete next[tagId];
+        return next;
+      });
     } catch (err) {
       if (err instanceof Error) setError(err.message);
       else setError('NFC 매핑 저장 중 오류가 발생했습니다.');
@@ -399,6 +437,7 @@ export default function NfcMapping() {
 
   const removeMapping = async (tagId: string) => {
     if (blockedForDemo()) return;
+    const draftAtStart = draftTokens[tagId];
     setRemovingTagId(tagId);
     setError('');
     setNotice('');
@@ -413,9 +452,13 @@ export default function NfcMapping() {
         headers: buildAuthHeaders(session.token),
       });
       const payload = await response.json().catch(() => null);
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         logout();
         return;
+      }
+      if (response.status === 403) {
+        revokeCachedNfcPermission();
+        throw new Error(NFC_PERMISSION_NOTICE);
       }
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.detail ?? 'NFC 매핑 해제에 실패했습니다.');
@@ -423,6 +466,12 @@ export default function NfcMapping() {
 
       setNotice('NFC 매핑을 해제했습니다.');
       await fetchMappings();
+      setDraftTokens((current) => {
+        if (current[tagId] !== draftAtStart) return current;
+        const next = { ...current };
+        delete next[tagId];
+        return next;
+      });
     } catch (err) {
       if (err instanceof Error) setError(err.message);
       else setError('NFC 매핑 해제 중 오류가 발생했습니다.');
@@ -704,9 +753,9 @@ export default function NfcMapping() {
               ) : (
                 <div className="space-y-3">
                   {pagedItems.map((item) => {
-                    const tokenDraft = draftTokens[item.tag_id] ?? '';
+                    const tokenDraft = draftTokens[item.tag_id] ?? item.nfc_token ?? '';
                     const trimmedToken = tokenDraft.trim();
-                    const nfcUrl = trimmedToken ? `${PUBLIC_APP_URL}/nfc/${trimmedToken}` : null;
+                    const nfcUrl = trimmedToken ? `${PUBLIC_APP_URL}/nfc/${encodeURIComponent(trimmedToken)}` : null;
                     return (
                       <section key={item.tag_id} className="border border-border/70 bg-background/80 p-4">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -751,6 +800,8 @@ export default function NfcMapping() {
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 onClick={() => saveMapping(item.tag_id)}
+                                aria-disabled={!canManageNfc}
+                                className={!canManageNfc ? 'cursor-not-allowed opacity-50' : undefined}
                                 disabled={savingTagId === item.tag_id || removingTagId === item.tag_id}
                               >
                                 <Save className="h-4 w-4" />
@@ -759,6 +810,8 @@ export default function NfcMapping() {
                               <Button
                                 variant="outline"
                                 onClick={() => removeMapping(item.tag_id)}
+                                aria-disabled={!canManageNfc}
+                                className={!canManageNfc ? 'cursor-not-allowed opacity-50' : undefined}
                                 disabled={
                                   !item.nfc_token || savingTagId === item.tag_id || removingTagId === item.tag_id
                                 }

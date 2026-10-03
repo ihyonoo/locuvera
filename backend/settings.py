@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -13,6 +14,13 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:9124@localhost:5432/rtls",
 )
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+RTLS_SIM_KEY = os.getenv("RTLS_SIM_KEY", "")
+try:
+    RTLS_REAL_READER_KEYS = json.loads(os.getenv("RTLS_REAL_READER_KEYS", "{}"))
+    if not isinstance(RTLS_REAL_READER_KEYS, dict):
+        RTLS_REAL_READER_KEYS = {}
+except json.JSONDecodeError:
+    RTLS_REAL_READER_KEYS = {}
 BESU_DIR = Path(__file__).resolve().parents[1] / "blockchain" / "besu"
 BESU_DEPLOYMENT_PATH = BESU_DIR / "deployments" / "usage-registry.json"
 AUTH_TOKEN_SECRET = os.getenv("AUTH_TOKEN_SECRET", "dev-auth-secret")

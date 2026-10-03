@@ -11,6 +11,7 @@ import random
 import pytest
 
 from backend.auth_utils import build_auth_token, pwd
+from backend.tests.conftest import post_signed_ingest
 from simulation import demand, world
 from simulation.generate_seed import render_seed_sql
 from simulation.topology import equipment, graph, zones
@@ -69,7 +70,7 @@ def _pump_ingest(instance, client, monkeypatch, start: float, seconds: float, on
             if only_tag is not None:
                 observations = [o for o in observations if o["tag_id"] == only_tag]
             if observations:
-                assert client.post("/ingest", json={**payload, "observations": observations}).status_code == 200
+                assert post_signed_ingest(client, {**payload, "observations": observations}).status_code == 200
     return now
 
 
@@ -89,18 +90,15 @@ class TestSeed:
             cur.execute("SELECT count(*) FROM readers WHERE is_real_hardware = FALSE AND floor IS NULL")
             assert cur.fetchone()[0] == 0
 
-    def test_seed_can_be_reapplied_after_ingest_created_a_reader_row(self, client, db_conn):
-        """/ingest가 시드보다 먼저 리더 행(floor NULL, is_real_hardware TRUE 기본값)을 만들어 둬도
-        재시드가 UniqueViolation 없이 그 행을 정본 값으로 되돌려야 한다."""
+    def test_ingest_does_not_create_a_reader_before_seed(self, client, db_conn):
+        """등록 전 리더는 수신하지 않고, 재시드가 정본 등록값을 만든다."""
         reader_id = next(iter(zones.SIM_ZONE_IDS))
         response = client.post("/ingest", json={"reader_id": reader_id, "ts": 1000, "observations": []})
-        assert response.status_code == 200
+        assert response.status_code == 401
 
         with db_conn.cursor() as cur:
-            cur.execute("SELECT floor, is_real_hardware FROM readers WHERE reader_id = %s", (reader_id,))
-            floor, is_real_hardware = cur.fetchone()
-        assert floor is None
-        assert is_real_hardware is True
+            cur.execute("SELECT COUNT(*) FROM readers WHERE reader_id = %s", (reader_id,))
+            assert cur.fetchone()[0] == 0
 
         with db_conn.cursor() as cur:
             cur.execute(render_seed_sql())
@@ -118,12 +116,12 @@ class TestIngestContract:
         instance = world.World(rng=random.Random(1), now=1000.0)
         instance.tick_physics(1000.2, world.PHYSICS_TICK_SEC)
         for payload in instance.collect_payloads(1000.3):
-            assert client.post("/ingest", json=payload).status_code == 200
+            assert post_signed_ingest(client, payload).status_code == 200
 
     def test_heartbeat_payloads_bring_every_reader_online(self, client, seeded_hospital):
         instance = world.World(rng=random.Random(1), now=1000.0)
         for payload in instance.collect_payloads(1000.0):
-            client.post("/ingest", json=payload)
+            assert post_signed_ingest(client, payload).status_code == 200
         with seeded_hospital.cursor() as cur:
             cur.execute("SELECT count(*) FROM readers WHERE is_real_hardware = FALSE AND last_seen_at IS NOT NULL")
             assert cur.fetchone()[0] == 42

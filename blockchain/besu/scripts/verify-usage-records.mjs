@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import solc from 'solc';
 import { ethers } from 'ethers';
+import { expectedRecorderForRecord } from './besu-keys.mjs';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT_PATH = path.join(ROOT_DIR, 'contracts', 'UsageRecordRegistry.sol');
@@ -507,9 +508,6 @@ async function main() {
   const parsedInput = JSON.parse(rawInput);
   const inputItems = Array.isArray(parsedInput?.items) ? parsedInput.items : [];
   const deployment = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
-  // 기록 계정의 주소. 배포 기록에 남은 값을 쓰고, 계정을 바꾼 경우에만 환경변수로 덮는다.
-  // 검증기는 개인키를 알 필요가 없다 — 서명이 그 키로 만들어졌는지만 확인하면 된다.
-  const expectedSender = process.env.BESU_SENDER_ADDRESS ?? deployment.deployer ?? null;
   const abi = compileContract();
   const iface = new ethers.Interface(abi);
   const provider = new ethers.JsonRpcProvider(RPC_URL, {
@@ -727,9 +725,10 @@ async function main() {
 
     // 서명 확인이 먼저다. 입력을 해석해 값을 맞춰 봐야, 그 입력이 기록 계정이 실제로
     // 제출한 것인지가 확인되지 않으면 위조된 트랜잭션도 통과한다.
+    const expectedSender = expectedRecorderForRecord(deployment, onchainRecord, Number(receipt.blockNumber), txIndex);
     result.tx_sender = recoverSender(indexedTx);
-    result.tx_sender_matches = expectedSender ? sameAddress(result.tx_sender, expectedSender) : null;
-    if (expectedSender && !result.tx_sender_matches) {
+    result.tx_sender_matches = expectedSender ? sameAddress(result.tx_sender, expectedSender) : false;
+    if (!result.tx_sender_matches) {
       result.anchor = buildAnchorResult(resolvedAnchor);
       Object.assign(result, formatStatus('tx_sender_mismatch', `복원된 발신자: ${result.tx_sender ?? '복원 실패'}`));
       results.push(result);

@@ -3,6 +3,7 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-main
@@ -13,7 +14,30 @@ env:
   IMAGE_NAMESPACE: ihyonoo/mediledger-equiptrace
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: blockchain/besu/package-lock.json
+      - name: Test Besu contract and key handling
+        working-directory: blockchain/besu
+        run: |
+          npm ci
+          npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test deploy safeguards
+        run: |
+          python -m pip install pytest pyyaml
+          python -m pytest deploy/tests -q
+
   build:
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,6 +78,7 @@ jobs:
 
   deploy:
     needs: build
+    if: vars.DEPLOY_READY == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Join tailnet
@@ -74,7 +99,7 @@ jobs:
 
       - name: Run remote deploy
         # 홈서버 authorized_keys의 forced-command(deploy/ci-deploy.sh)가
-        # 실제 실행 명령을 고정하므로 여기 인자는 서버에서 무시된다.
+        # 실행 명령을 고정하고 여기 전달한 SHA를 서버에서 검증한다.
         # exit code만 forced-command 결과가 그대로 전달된다.
         run: |
           ssh -o BatchMode=yes "${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}" "${{ github.sha }}"

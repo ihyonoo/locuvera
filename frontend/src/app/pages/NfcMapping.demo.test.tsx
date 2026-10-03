@@ -5,13 +5,20 @@ import NfcMapping from './NfcMapping';
 
 const DEMO_NOTICE = '데모 체험 계정에서는 NFC 매핑을 변경할 수 없습니다.';
 
-function storeAdminSession(isDemo: boolean) {
+function storeAdminSession(isDemo: boolean, canManageNfc: boolean | undefined = true) {
   sessionStorage.setItem(
     'auth_session',
     JSON.stringify({
       token: 'test-token',
       expires_at: 9999999999,
-      user: { user_id: 1, username: 'admin', display_name: '관리자', role: 'admin', is_demo: isDemo },
+      user: {
+        user_id: 1,
+        username: 'admin',
+        display_name: '관리자',
+        role: 'admin',
+        is_demo: isDemo,
+        can_manage_nfc: canManageNfc,
+      },
     }),
   );
 }
@@ -100,5 +107,93 @@ describe('NfcMapping demo guards', () => {
 
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(callsBefore));
     expect(screen.queryByText(DEMO_NOTICE)).not.toBeInTheDocument();
+  });
+
+  it('shows a disabled-looking action and administrator guidance for an unapproved admin', async () => {
+    storeAdminSession(false, false);
+    const callsBefore = await renderAndWait();
+    const saveButton = screen.getByRole('button', { name: '저장' });
+    expect(saveButton).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.click(saveButton);
+    expect(await screen.findByText('NFC 매핑 변경 권한은 시스템 관리자에게 문의하세요.')).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.length).toBe(callsBefore);
+  });
+
+  it('refreshes an old session capability before allowing a grandfathered admin to edit', async () => {
+    storeAdminSession(false, undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () =>
+            String(url).includes('/auth/me') ? { ok: true, user: { can_manage_nfc: true } } : MAPPING_PAYLOAD,
+        }),
+      ),
+    );
+    await renderAndWait();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toHaveAttribute('aria-disabled', 'false'));
+    expect(JSON.parse(sessionStorage.getItem('auth_session') ?? '{}').user.can_manage_nfc).toBe(true);
+  });
+
+  it('refreshes a cached capability when it was revoked', async () => {
+    storeAdminSession(false, true);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () =>
+            String(url).includes('/auth/me') ? { ok: true, user: { can_manage_nfc: false } } : MAPPING_PAYLOAD,
+        }),
+      ),
+    );
+    await renderAndWait();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toHaveAttribute('aria-disabled', 'true'));
+    expect(JSON.parse(sessionStorage.getItem('auth_session') ?? '{}').user.can_manage_nfc).toBe(false);
+  });
+
+  it('refreshes a cached capability when it was granted', async () => {
+    storeAdminSession(false, false);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () =>
+            String(url).includes('/auth/me') ? { ok: true, user: { can_manage_nfc: true } } : MAPPING_PAYLOAD,
+        }),
+      ),
+    );
+    await renderAndWait();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toHaveAttribute('aria-disabled', 'false'));
+    expect(JSON.parse(sessionStorage.getItem('auth_session') ?? '{}').user.can_manage_nfc).toBe(true);
+  });
+
+  it('keeps the session when the server rejects a mapping write', async () => {
+    storeAdminSession(false);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string, options?: RequestInit) =>
+        Promise.resolve({
+          ok: options?.method !== 'POST',
+          status: options?.method === 'POST' ? 403 : 200,
+          json: async () => (options?.method === 'POST' ? { detail: '금지' } : MAPPING_PAYLOAD),
+        }),
+      ),
+    );
+    await renderAndWait();
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(await screen.findByText('NFC 매핑 변경 권한은 시스템 관리자에게 문의하세요.')).toBeInTheDocument();
+    expect(sessionStorage.getItem('auth_session')).not.toBeNull();
+    expect(JSON.parse(sessionStorage.getItem('auth_session') ?? '{}').user.can_manage_nfc).toBe(false);
   });
 });

@@ -151,6 +151,15 @@ class TestExchangeCode:
         assert result["email_verified"] is False
         assert result["name"] == ""
 
+    def test_string_false_is_not_a_verified_email(self):
+        response = _resp(200, {"sub": "123", "email": "user@example.com", "email_verified": "false"})
+        with (
+            patch("backend.google_oauth.requests.post", return_value=self.TOKEN_OK),
+            patch("backend.google_oauth.requests.get", return_value=response),
+        ):
+            result = exchange_code("auth-code")
+        assert result["email_verified"] is False
+
 
 class TestRedirectInState:
     """구글 왕복 중 '원래 가려던 곳'을 잃지 않아야 한다.

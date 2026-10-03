@@ -39,7 +39,7 @@ services:
     # 이미지는 GitHub Actions CI가 빌드해 GHCR에 push한다.
     # 홈서버는 이 태그를 pull만 하며 docker compose build를 쓰지 않는다.
     # .github/workflows/deploy.yml, deploy/ci-deploy.sh 참고.
-    image: ghcr.io/ihyonoo/mediledger-equiptrace-backend:latest
+    image: ghcr.io/ihyonoo/mediledger-equiptrace-backend:${DEPLOY_IMAGE_TAG:-latest}
     container_name: mediledger-backend
     restart: unless-stopped
     # DATABASE_URL·AUTH_TOKEN_SECRET 등 나머지 설정은 여기서 주입.
@@ -61,25 +61,30 @@ services:
       - "192.168.0.53:8000:8000"
     networks:
       - besu-qbft
+      - simulator-api
 
   simulator:
     # backend/web과 동일 — GHCR에서 pull만 한다.
-    image: ghcr.io/ihyonoo/mediledger-equiptrace-simulator:latest
+    image: ghcr.io/ihyonoo/mediledger-equiptrace-simulator:${DEPLOY_IMAGE_TAG:-latest}
     container_name: mediledger-simulator
     restart: unless-stopped
-    # DATABASE_URL·SIM_STAFF_PASSWORD 등은 backend와 같은 루트 .env에서 주입된다.
-    env_file: .env
     environment:
       # 컨테이너 네트워크 내부 DNS로 backend에 접근 (호스트 전용 8000 포트가 아님).
       BACKEND_BASE_URL: http://backend:8000
+      SIM_STAFF_PASSWORD: ${SIM_STAFF_PASSWORD:?SIM_STAFF_PASSWORD required}
+      RTLS_SIM_KEY: ${RTLS_SIM_KEY:?RTLS_SIM_KEY required}
+      SIM_HTTP_TIMEOUT_SEC: ${SIM_HTTP_TIMEOUT_SEC:-10}
+      SIM_INGEST_TIMEOUT_SEC: ${SIM_INGEST_TIMEOUT_SEC:-5}
+      RETURN_HTTP_TIMEOUT_SEC: ${RETURN_HTTP_TIMEOUT_SEC:-40}
+      SIM_RANDOM_SEED: ${SIM_RANDOM_SEED:-}
     depends_on:
       - backend
     networks:
-      - besu-qbft
+      - simulator-api
 
   web:
     # backend와 동일 — GHCR에서 pull만 한다.
-    image: ghcr.io/ihyonoo/mediledger-equiptrace-web:latest
+    image: ghcr.io/ihyonoo/mediledger-equiptrace-web:${DEPLOY_IMAGE_TAG:-latest}
     container_name: mediledger-web
     restart: unless-stopped
     volumes:
@@ -117,3 +122,5 @@ networks:
   analytics:
     name: analytics
     external: true
+  simulator-api:
+    driver: bridge

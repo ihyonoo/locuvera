@@ -210,7 +210,7 @@ class TestAnchorUsageRecordToChainEndToEnd:
             db_conn, tag_id=tag_id, user_id=user_id, returned=True, returned_by_user_id=returner_id
         )
 
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
 
         def fake_run_besu_script(script_name, *args, stdin_payload=None, **kwargs):
             if script_name == "read-usage-record.mjs":
@@ -256,7 +256,7 @@ class TestAnchorUsageRecordToChainEndToEnd:
             db_conn, tag_id=tag_id, user_id=user_id, returned=True, returned_by_user_id=user_id
         )
 
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (False, "체인 미배포"))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (False, "체인 미배포"))
         subprocess_calls = []
         monkeypatch.setattr(svc, "run_besu_script", lambda *a, **k: subprocess_calls.append(a) or (True, "{}", ""))
 

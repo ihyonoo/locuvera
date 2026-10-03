@@ -1,41 +1,41 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import solc from "solc";
-import { ethers } from "ethers";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import solc from 'solc';
+import { ethers } from 'ethers';
+import { requirePrivateKey, requireSenderAddress } from './besu-keys.mjs';
 
-const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CONTRACT_PATH = path.join(ROOT_DIR, "contracts", "UsageRecordRegistry.sol");
-const DEPLOYMENT_PATH = path.join(ROOT_DIR, "deployments", "usage-registry.json");
-const RPC_URL = process.env.BESU_RPC_URL ?? "http://127.0.0.1:8549";
-const CHAIN_ID = Number(process.env.BESU_CHAIN_ID ?? "1337");
-const SENDER_PRIVATE_KEY =
-  process.env.BESU_SENDER_PRIVATE_KEY ??
-  "ae6ae8e5ccbfb04590405997ee2d52d2b330726137b875053c36d94e974d162f";
-const GAS_PRICE = ethers.parseUnits("1", "gwei");
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CONTRACT_PATH = path.join(ROOT_DIR, 'contracts', 'UsageRecordRegistry.sol');
+const DEPLOYMENT_PATH = path.join(ROOT_DIR, 'deployments', 'usage-registry.json');
+const RPC_URL = process.env.BESU_RPC_URL ?? 'http://127.0.0.1:8549';
+const CHAIN_ID = Number(process.env.BESU_CHAIN_ID ?? '1337');
+const SENDER_PRIVATE_KEY = requirePrivateKey('BESU_SENDER_PRIVATE_KEY');
+requireSenderAddress(process.env, SENDER_PRIVATE_KEY);
+const GAS_PRICE = ethers.parseUnits('1', 'gwei');
 const GAS_LIMIT = 400_000n;
 const POLL_INTERVAL_MS = 1_000;
 const RECEIPT_TIMEOUT_MS = 120_000;
 
 function compileContract() {
-  const source = fs.readFileSync(CONTRACT_PATH, "utf8");
+  const source = fs.readFileSync(CONTRACT_PATH, 'utf8');
   const input = {
-    language: "Solidity",
+    language: 'Solidity',
     sources: {
-      "UsageRecordRegistry.sol": {
+      'UsageRecordRegistry.sol': {
         content: source,
       },
     },
     settings: {
-      evmVersion: "berlin",
+      evmVersion: 'berlin',
       optimizer: {
         enabled: true,
         runs: 200,
       },
       viaIR: true,
       outputSelection: {
-        "*": {
-          "*": ["abi"],
+        '*': {
+          '*': ['abi'],
         },
       },
     },
@@ -43,16 +43,16 @@ function compileContract() {
 
   const output = JSON.parse(solc.compile(JSON.stringify(input)));
   const errors = output.errors ?? [];
-  const fatalErrors = errors.filter((item) => item.severity === "error");
+  const fatalErrors = errors.filter((item) => item.severity === 'error');
   if (fatalErrors.length > 0) {
-    throw new Error(fatalErrors.map((item) => item.formattedMessage).join("\n"));
+    throw new Error(fatalErrors.map((item) => item.formattedMessage).join('\n'));
   }
 
-  return output.contracts["UsageRecordRegistry.sol"].UsageRecordRegistry.abi;
+  return output.contracts['UsageRecordRegistry.sol'].UsageRecordRegistry.abi;
 }
 
 function normalizeString(value) {
-  return typeof value === "string" ? value : "";
+  return typeof value === 'string' ? value : '';
 }
 
 function normalizeInteger(value, label) {
@@ -64,7 +64,7 @@ function normalizeInteger(value, label) {
 }
 
 function normalizeRecord(value, index) {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     throw new Error(`record ${index} must be an object`);
   }
 
@@ -101,7 +101,7 @@ async function waitForReceipts(provider, txHashes) {
 
   while (receipts.size < txHashes.length) {
     if (Date.now() - startedAt > RECEIPT_TIMEOUT_MS) {
-      throw new Error("timed out while waiting for transaction receipts");
+      throw new Error('timed out while waiting for transaction receipts');
     }
 
     await Promise.all(
@@ -153,32 +153,31 @@ async function signBatchTransactions(contract, wallet, records, startingNonce) {
 
 async function main() {
   const recordsPath = process.argv[2];
-  const outputPath =
-    process.argv[3] ?? path.join(ROOT_DIR, "examples", "usage-record-batch-5x30-result.json");
-  const batchSize = Number(process.argv[4] ?? "30");
-  const batchCount = Number(process.argv[5] ?? "5");
+  const outputPath = process.argv[3] ?? path.join(ROOT_DIR, 'examples', 'usage-record-batch-5x30-result.json');
+  const batchSize = Number(process.argv[4] ?? '30');
+  const batchCount = Number(process.argv[5] ?? '5');
 
   if (!recordsPath) {
     throw new Error(
-      "usage: node scripts/send-usage-record-multiblock.mjs <records-json-path> [output-json-path] [batch-size] [batch-count]",
+      'usage: node scripts/send-usage-record-multiblock.mjs <records-json-path> [output-json-path] [batch-size] [batch-count]',
     );
   }
 
   if (!Number.isInteger(batchSize) || batchSize <= 0) {
-    throw new Error("batch-size must be a positive integer");
+    throw new Error('batch-size must be a positive integer');
   }
 
   if (!Number.isInteger(batchCount) || batchCount <= 0) {
-    throw new Error("batch-count must be a positive integer");
+    throw new Error('batch-count must be a positive integer');
   }
 
   if (!fs.existsSync(DEPLOYMENT_PATH)) {
-    throw new Error("deployment file not found. run deploy-usage-registry.mjs first");
+    throw new Error('deployment file not found. run deploy-usage-registry.mjs first');
   }
 
-  const rawRecords = JSON.parse(fs.readFileSync(path.resolve(recordsPath), "utf8"));
+  const rawRecords = JSON.parse(fs.readFileSync(path.resolve(recordsPath), 'utf8'));
   if (!Array.isArray(rawRecords)) {
-    throw new Error("records file must be a JSON array");
+    throw new Error('records file must be a JSON array');
   }
 
   const expectedCount = batchSize * batchCount;
@@ -187,17 +186,17 @@ async function main() {
   }
 
   const records = rawRecords.slice(0, expectedCount).map((item, index) => normalizeRecord(item, index));
-  const deployment = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, "utf8"));
+  const deployment = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
   const abi = compileContract();
   const provider = new ethers.JsonRpcProvider(RPC_URL, {
-    name: "besu-qbft",
+    name: 'besu-qbft',
     chainId: CHAIN_ID,
   });
   const wallet = new ethers.Wallet(SENDER_PRIVATE_KEY, provider);
   const contract = new ethers.Contract(deployment.address, abi, wallet);
 
   const alignment = await waitForNextBlock(provider);
-  const baseNonce = await provider.getTransactionCount(wallet.address, "pending");
+  const baseNonce = await provider.getTransactionCount(wallet.address, 'pending');
   const batchResults = [];
   let nonceCursor = baseNonce;
   let previousBatchBlockNumber = null;
@@ -213,16 +212,11 @@ async function main() {
     const distinctBlockNumbers = [...new Set(receipts.map((receipt) => Number(receipt.blockNumber)))];
 
     if (distinctBlockNumbers.length !== 1) {
-      throw new Error(
-        `batch ${batchIndex + 1} spread across multiple blocks: ${distinctBlockNumbers.join(", ")}`,
-      );
+      throw new Error(`batch ${batchIndex + 1} spread across multiple blocks: ${distinctBlockNumbers.join(', ')}`);
     }
 
     const batchBlockNumber = distinctBlockNumbers[0];
-    if (
-      previousBatchBlockNumber !== null &&
-      batchBlockNumber !== previousBatchBlockNumber + 1
-    ) {
+    if (previousBatchBlockNumber !== null && batchBlockNumber !== previousBatchBlockNumber + 1) {
       throw new Error(
         `batch ${batchIndex + 1} landed in block ${batchBlockNumber}, expected ${previousBatchBlockNumber + 1}`,
       );
@@ -264,10 +258,7 @@ async function main() {
       blockNumber: batch.blockNumber,
       blockHash: batch.blockHash,
       recordCount: batch.recordCount,
-      transactionIndexRange: [
-        Math.min(...batch.transactionIndexes),
-        Math.max(...batch.transactionIndexes),
-      ],
+      transactionIndexRange: [Math.min(...batch.transactionIndexes), Math.max(...batch.transactionIndexes)],
     })),
     batches: batchResults,
   };

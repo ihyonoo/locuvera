@@ -40,6 +40,8 @@ done
 echo "[3/6] schema + seed: database/schema.sql, simulation.apply_seed"
 psql "${DATABASE_URL:-postgresql://mediledger:mediledger@localhost:5432/mediledger_db}" \
   -q -f database/schema.sql
+psql "${DATABASE_URL:-postgresql://mediledger:mediledger@localhost:5432/mediledger_db}" \
+  -q -f database/provision_real_readers.sql
 # 재시드하면 떠 있는 시뮬레이터의 월드 상태가 DB와 반드시 어긋나므로, 6단계가 새로 띄우도록 먼저 내린다.
 pkill -f 'simulation\.simulator' 2>/dev/null || true
 # 백엔드도 같이 내린다 — 위치 판정 상태(tag_state)가 프로세스 메모리에 있어서,
