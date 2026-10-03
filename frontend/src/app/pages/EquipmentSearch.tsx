@@ -474,8 +474,13 @@ export default function EquipmentSearch() {
   useEffect(() => {
     if (!isAuthorized) return;
     let cancelled = false;
+    let pollTimer: number | undefined;
+    let requestController: AbortController | undefined;
 
     const fetchLiveLocations = async () => {
+      const controller = new AbortController();
+      requestController = controller;
+      const requestTimeout = window.setTimeout(() => controller.abort(), 5000);
       try {
         const session = getStoredAuthSession();
         if (!session?.token) {
@@ -488,8 +493,10 @@ export default function EquipmentSearch() {
           method: 'GET',
           cache: 'no-store',
           headers: buildAuthHeaders(session.token),
+          signal: controller.signal,
         });
         const payload = await response.json().catch(() => null);
+        if (cancelled) return;
         if (response.status === 401 || response.status === 403) {
           logout();
           return;
@@ -511,18 +518,20 @@ export default function EquipmentSearch() {
         if (err instanceof Error) setFetchError(err.message);
         else setFetchError('실시간 위치 조회 중 오류가 발생했습니다.');
       } finally {
+        window.clearTimeout(requestTimeout);
+        requestController = undefined;
         if (!cancelled) {
           setIsLoading(false);
+          pollTimer = window.setTimeout(fetchLiveLocations, 1000);
         }
       }
     };
 
-    fetchLiveLocations();
-    // 의료진 화면은 실시간 위치가 핵심이므로 짧은 주기로 새 값을 다시 받아온다.
-    const intervalId = window.setInterval(fetchLiveLocations, 1000);
+    void fetchLiveLocations();
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      window.clearTimeout(pollTimer);
+      requestController?.abort();
     };
   }, [isAuthorized, logout, hideSimulated]);
 

@@ -75,6 +75,12 @@ describe('NfcMapping NTAG binding column', () => {
     expect(await screen.findByText('미바인딩')).toBeInTheDocument();
   });
 
+  it('encodes a legacy token before displaying its NFC URL', async () => {
+    renderWith([itemFor({ nfc_token: 'pump%001' })]);
+
+    expect(await screen.findByText(`${window.location.origin}/nfc/pump%25001`)).toBeInTheDocument();
+  });
+
   it('no longer shows the RTLS snapshot, which belongs to the devices screen', async () => {
     renderWith([itemFor({ ntag_uid: '04B07F1A8F1E90', ntag_bound: true, ntag_last_ctr: 1 })]);
 

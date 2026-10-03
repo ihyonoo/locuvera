@@ -227,6 +227,9 @@ export default function MyPage() {
         body: JSON.stringify({ email: user.email }),
       });
       const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.ok) {
+        throw new Error('인증 메일 재발송에 실패했습니다.');
+      }
       setEmailMsg({ tone: 'ok', text: payload?.message ?? '인증 메일을 다시 보냈습니다.' });
     } catch {
       setEmailMsg({ tone: 'err', text: '인증 메일 재발송에 실패했습니다.' });

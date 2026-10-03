@@ -9,6 +9,7 @@ export type AuthUser = {
   email_verified?: boolean;
   // 가입 없이 둘러보는 공개 데모 계정. 계정 설정 변경은 백엔드에서도 403으로 막힌다.
   is_demo?: boolean;
+  can_manage_nfc?: boolean;
 };
 
 export type AuthSession = {

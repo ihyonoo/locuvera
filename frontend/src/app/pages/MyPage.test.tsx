@@ -65,6 +65,50 @@ describe('MyPage header', () => {
   });
 });
 
+describe('MyPage verification email', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  it('shows failure when the resend API rejects the request', async () => {
+    storeSession('staff');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('resend-verification')
+            ? { ok: false, status: 500, json: async () => ({ ok: false, message: '서버 오류' }) }
+            : {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                  ok: true,
+                  user: {
+                    user_id: 1,
+                    username: 'u',
+                    display_name: 'u',
+                    role: 'staff',
+                    email: 'u@example.com',
+                    email_verified: false,
+                  },
+                }),
+              },
+        ),
+      ),
+    );
+    renderMyPage();
+
+    const emailPanel = (await screen.findByText('이메일 변경', { selector: '.panel-title' })).closest(
+      'section',
+    ) as HTMLElement;
+    fireEvent.click(within(emailPanel).getByRole('button', { name: '변경' }));
+    fireEvent.click(await screen.findByRole('button', { name: '인증 메일 재발송' }));
+
+    expect(await screen.findByText('인증 메일 재발송에 실패했습니다.')).toBeInTheDocument();
+  });
+});
+
 describe('MyPage account actions for demo accounts', () => {
   const DEMO_NOTICE = '데모 체험 계정에서는 계정 설정을 변경할 수 없습니다.';
 

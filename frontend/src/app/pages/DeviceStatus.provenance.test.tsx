@@ -87,5 +87,6 @@ describe('DeviceStatus provenance visibility', () => {
 
     expect(screen.queryByText('모의 장비')).not.toBeInTheDocument();
     expect(screen.getByText('실물 장비')).toBeInTheDocument();
+    expect(screen.getAllByText('1 / 1')).toHaveLength(2);
   });
 });
