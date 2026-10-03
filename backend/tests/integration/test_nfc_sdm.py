@@ -301,11 +301,28 @@ class TestMasterKeyAbsent:
 
 
 class TestBindingLifecycle:
+    def test_new_admin_cannot_change_chip_binding(self, client, seed_tag, seed_user, db_conn):
+        seed_tag(tag_id="EQ-BIND-NEW", nfc_token="pump-777")
+        _, headers = seed_user(username="new-chip-admin", role="admin")
+
+        bind = client.post(
+            "/admin/ntag-bindings",
+            json={"tag_id": "EQ-BIND-NEW", "ntag_uid": "04AABBCCDDEE99"},
+            headers=headers,
+        )
+        unbind = client.delete("/admin/ntag-bindings/EQ-BIND-NEW", headers=headers)
+
+        assert bind.status_code == 403
+        assert unbind.status_code == 403
+        with db_conn.cursor() as cur:
+            cur.execute("SELECT ntag_uid, ntag_bound FROM tags WHERE tag_id = 'EQ-BIND-NEW'")
+            assert cur.fetchone() == (None, False)
+
     def test_unbinding_keeps_the_counter_so_old_urls_stay_dead(self, client, db_conn, seed_tag, seed_user, bind_ntag):
         """언바인딩이 카운터를 0으로 되돌리면, 그 전에 캡처된 URL이 전부 되살아난다."""
         seed_tag(tag_id="EQ-BIND-0001", equipment_name="수액펌프-401", nfc_token="pump-401")
         uid = bind_ntag("pump-401")
-        _, admin_headers = seed_user(username="admin-bind-1", role="admin")
+        _, admin_headers = seed_user(username="admin-bind-1", role="admin", can_manage_nfc=True)
         captured = make_sdm_query(uid, 5)
         client.get("/nfc/pump-401", params=captured, headers=admin_headers)
 
@@ -324,7 +341,7 @@ class TestBindingLifecycle:
         seed_tag(tag_id="EQ-BIND-0002", equipment_name="수액펌프-402", nfc_token="pump-402")
         seed_tag(tag_id="EQ-BIND-0003", equipment_name="제세동기-402", nfc_token="defib-402")
         uid = bind_ntag("pump-402")
-        _, admin_headers = seed_user(username="admin-bind-2", role="admin")
+        _, admin_headers = seed_user(username="admin-bind-2", role="admin", can_manage_nfc=True)
         client.delete("/admin/ntag-bindings/EQ-BIND-0002", headers=admin_headers)
 
         response = client.post(
@@ -340,7 +357,7 @@ class TestBindingLifecycle:
         그 사실은 비가역인 키 회전이 끝난 뒤에야 드러난다.
         """
         seed_tag(tag_id="EQ-BIND-0005", equipment_name="수액펌프-404", nfc_token="pump-404")
-        _, admin_headers = seed_user(username="admin-bind-4", role="admin")
+        _, admin_headers = seed_user(username="admin-bind-4", role="admin", can_manage_nfc=True)
 
         response = client.post(
             "/admin/ntag-bindings",
@@ -361,7 +378,7 @@ class TestBindingLifecycle:
         """
         seed_tag(tag_id="EQ-BIND-0007", equipment_name="수액펌프-405", nfc_token="pump-405")
         uid = bind_ntag("pump-405")
-        _, admin_headers = seed_user(username="admin-bind-6", role="admin")
+        _, admin_headers = seed_user(username="admin-bind-6", role="admin", can_manage_nfc=True)
         _, staff_headers = seed_user(username="staff-bind-6")
 
         before = client.post(
@@ -378,7 +395,7 @@ class TestBindingLifecycle:
     def test_binding_is_refused_when_the_equipment_has_no_token(self, client, seed_tag, seed_user):
         """토큰이 없으면 태그에 구울 URL을 만들 수 없다 — 굽기 전에 막는다."""
         seed_tag(tag_id="EQ-BIND-0006", equipment_name="토큰없는장비", nfc_token=None)
-        _, admin_headers = seed_user(username="admin-bind-5", role="admin")
+        _, admin_headers = seed_user(username="admin-bind-5", role="admin", can_manage_nfc=True)
 
         response = client.post(
             "/admin/ntag-bindings",
@@ -392,7 +409,7 @@ class TestBindingLifecycle:
         """개인화 도구가 중간에 실패한 뒤 재실행해도 안전해야 한다."""
         seed_tag(tag_id="EQ-BIND-0004", equipment_name="수액펌프-403", nfc_token="pump-403")
         uid = bind_ntag("pump-403")
-        _, admin_headers = seed_user(username="admin-bind-3", role="admin")
+        _, admin_headers = seed_user(username="admin-bind-3", role="admin", can_manage_nfc=True)
 
         response = client.post(
             "/admin/ntag-bindings", json={"tag_id": "EQ-BIND-0004", "ntag_uid": uid}, headers=admin_headers

@@ -8,15 +8,13 @@ import pytest
 
 from backend.rtls_utils import REDIS_LOCATION_KEY_PREFIX, get_redis_client
 from backend.server import tag_obs, tag_state
+from backend.tests.conftest import post_signed_ingest
 
 UNKNOWN_TAG = "d546df97-4757-47ef-be09-3e2dcbdd0c77:36788:17584"
 
 
 def _post_ingest(client, reader_id, observations):
-    response = client.post(
-        "/ingest",
-        json={"reader_id": reader_id, "ts": 1000, "observations": observations},
-    )
+    response = post_signed_ingest(client, {"reader_id": reader_id, "ts": 1000, "observations": observations})
     assert response.status_code == 200, response.text
     return response
 

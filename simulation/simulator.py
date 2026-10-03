@@ -12,7 +12,6 @@
 """
 
 import asyncio
-import contextlib
 import datetime as dt
 import random
 import signal
@@ -154,10 +153,12 @@ async def run() -> None:
     print("[simulator] stopping...")
     for task in tasks:
         task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     await api.aclose()
     print("[simulator] stopped")
+    for result in results:
+        if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
+            raise result
 
 
 def main() -> None:

@@ -2,6 +2,7 @@ import datetime as dt
 import json
 import logging
 import os
+import re
 import subprocess
 
 import psycopg
@@ -17,11 +18,16 @@ except ModuleNotFoundError as exc:
 logger = logging.getLogger("mediledger.usage_history")
 
 
-def is_besu_ready() -> tuple[bool, str | None]:
+def is_besu_ready(*, require_signer: bool = False) -> tuple[bool, str | None]:
     if not BESU_DEPLOYMENT_PATH.exists():
         return False, "배포된 UsageRecordRegistry 컨트랙트 정보가 없습니다."
     if not (BESU_DIR / "node_modules").exists():
         return False, "blockchain/besu 의 npm 의존성이 설치되지 않았습니다."
+    if require_signer:
+        if not re.fullmatch(r"(?:0x)?[0-9A-Fa-f]{64}", os.getenv("BESU_SENDER_PRIVATE_KEY", "")):
+            return False, "BESU_SENDER_PRIVATE_KEY가 설정되지 않았거나 형식이 잘못됐습니다."
+        if not re.fullmatch(r"0x[0-9A-Fa-f]{40}", os.getenv("BESU_SENDER_ADDRESS", "")):
+            return False, "BESU_SENDER_ADDRESS가 설정되지 않았거나 형식이 잘못됐습니다."
     return True, None
 
 
@@ -142,7 +148,7 @@ def usage_record_matches_chain(expected: dict, actual: dict) -> bool:
 
 
 def anchor_usage_record_to_chain(usage_id: int) -> dict:
-    ready, reason = is_besu_ready()
+    ready, reason = is_besu_ready(require_signer=True)
     if not ready:
         return {
             "ok": False,

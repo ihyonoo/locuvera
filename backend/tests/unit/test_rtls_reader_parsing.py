@@ -4,7 +4,11 @@
 파싱 자체는 순수 함수라, bleak만 스텁으로 끼워 넣고 모듈을 불러온다.
 """
 
+import asyncio
+import hashlib
+import hmac
 import importlib.util
+import json
 import sys
 import types
 from pathlib import Path
@@ -69,3 +73,87 @@ class TestParseIBeaconTagId:
         adv = FakeAdvertisement({0x004C: bytes([0x10, 0x05]) + b"\x00" * 20})
 
         assert reader.parse_ibeacon_tag_id(adv) is None
+
+
+def test_sender_removes_expired_beacon_buffer(monkeypatch):
+    reader.tag_samples.clear()
+    reader.tag_samples["expired-tag"] = [(1, -70)]
+    monkeypatch.setattr(reader.time, "time", lambda: 100)
+
+    async def stop_after_one_pass(_delay):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(reader.asyncio, "sleep", stop_after_one_pass)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(reader.sender_loop())
+
+    assert "expired-tag" not in reader.tag_samples
+
+
+def test_sender_signs_exact_body_and_checks_http_status(monkeypatch):
+    reader.tag_samples.clear()
+    reader.tag_samples["known-tag"] = [(100, -50)]
+    monkeypatch.setattr(reader.time, "time", lambda: 100)
+    monkeypatch.setattr(reader, "READER_ID", "M501")
+    monkeypatch.setattr(reader, "READER_KEY", "test-reader-key-32-bytes-000001", raising=False)
+    captured = []
+
+    def post(_url, **kwargs):
+        captured.append(kwargs)
+        return types.SimpleNamespace(raise_for_status=lambda: None)
+
+    async def stop_after_one_pass(_delay):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(reader.requests, "post", post)
+    monkeypatch.setattr(reader.asyncio, "sleep", stop_after_one_pass)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(reader.sender_loop())
+
+    sent = captured[0]
+    headers = sent["headers"]
+    body = sent["data"]
+    message = (
+        f"v1\nM501\n{headers['X-RTLS-Timestamp']}\n{headers['X-RTLS-Nonce']}\n{hashlib.sha256(body).hexdigest()}"
+    ).encode()
+    assert headers["X-RTLS-Reader-ID"] == "M501"
+    assert hmac.compare_digest(
+        headers["X-RTLS-Signature"], hmac.new(reader.READER_KEY.encode(), message, hashlib.sha256).hexdigest()
+    )
+
+
+def test_sender_uses_server_date_after_reader_clock_is_wrong(monkeypatch):
+    reader.tag_samples.clear()
+    reader.tag_samples["known-tag"] = [(100, -50)]
+    monkeypatch.setattr(reader.time, "time", lambda: 100)
+    monkeypatch.setattr(reader, "READER_ID", "M501")
+    monkeypatch.setattr(reader, "READER_KEY", "test-reader-key-32-bytes-000001", raising=False)
+    sent = []
+
+    def post(_url, **kwargs):
+        sent.append(kwargs)
+
+        def raise_for_status():
+            if len(sent) == 1:
+                raise reader.requests.HTTPError("clock skew")
+
+        return types.SimpleNamespace(
+            headers={"Date": "Thu, 01 Jan 1970 00:16:40 GMT"},
+            raise_for_status=raise_for_status,
+        )
+
+    async def stop_after_two_passes(_delay):
+        if len(sent) == 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(reader.requests, "post", post)
+    monkeypatch.setattr(reader.asyncio, "sleep", stop_after_two_passes)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(reader.sender_loop())
+
+    assert len(sent) == 2
+    assert sent[0]["headers"]["X-RTLS-Timestamp"] == "100"
+    assert sent[1]["headers"]["X-RTLS-Timestamp"] == "1000"
+    assert json.loads(sent[1]["data"])["ts"] == 1000
+    assert json.loads(sent[1]["data"])["observations"][0]["last_seen"] == 1000

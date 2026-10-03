@@ -57,6 +57,12 @@ class TestNormalizeDisplayName:
     def test_accepts_valid_name(self):
         assert normalize_display_name(" 최현우 ") == "최현우"
 
+    @pytest.mark.parametrize("name", ["=1+1", "  +SUM(1)", "\t@cmd", "\n-3"])
+    def test_rejects_spreadsheet_formula_prefix(self, name):
+        with pytest.raises(HTTPException) as exc:
+            normalize_display_name(name)
+        assert exc.value.status_code == 400
+
 
 class TestNormalizeOptionalText:
     def test_none_passes_through(self):
@@ -115,3 +121,9 @@ class TestAuthToken:
     def test_rejects_malformed_token(self):
         with pytest.raises(HTTPException):
             decode_auth_token("not-a-valid-token")
+
+    @pytest.mark.parametrize("token", ["한글.x", "e30.한글", "e30.%"])
+    def test_rejects_invalid_token_encoding_as_unauthorized(self, token):
+        with pytest.raises(HTTPException) as exc:
+            decode_auth_token(token)
+        assert exc.value.status_code == 401

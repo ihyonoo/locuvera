@@ -1,10 +1,15 @@
+import copy
 import datetime as dt
+import logging
 import os
+import re
+import threading
 import time
 import urllib.parse
+from typing import Annotated
 
 import psycopg
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
@@ -31,8 +36,10 @@ try:
     from backend.location_decision import decide_transition, new_tag_state
     from backend.nfc_tap import consume_tap_session, master_key_missing, verify_tap_and_mint_session
     from backend.ntag424 import UID_RE, parse_sdm_params
+    from backend.rtls_auth import authenticated_ingest_payload
     from backend.rtls_utils import (
         cache_location_updates,
+        delete_tag_caches,
         filter_registered_tag_ids,
         insert_location_history,
         load_active_tag_ids,
@@ -46,7 +53,6 @@ try:
         mark_tags_seen,
         normalize_nfc_token,
         resolve_tag_location_snapshot,
-        upsert_readers_from_ingest,
     )
     from backend.schemas import (
         ChangeEmailRequest,
@@ -113,8 +119,10 @@ except ModuleNotFoundError as exc:
     from location_decision import decide_transition, new_tag_state
     from nfc_tap import consume_tap_session, master_key_missing, verify_tap_and_mint_session
     from ntag424 import UID_RE, parse_sdm_params
+    from rtls_auth import authenticated_ingest_payload
     from rtls_utils import (
         cache_location_updates,
+        delete_tag_caches,
         filter_registered_tag_ids,
         insert_location_history,
         load_active_tag_ids,
@@ -128,7 +136,6 @@ except ModuleNotFoundError as exc:
         mark_tags_seen,
         normalize_nfc_token,
         resolve_tag_location_snapshot,
-        upsert_readers_from_ingest,
     )
     from schemas import (
         ChangeEmailRequest,
@@ -206,6 +213,7 @@ app.add_middleware(
 # 서버 메모리에서 태그별 관측 상태를 잠시 유지한다.
 tag_obs: dict[str, dict[str, dict]] = {}
 tag_state: dict[str, dict] = {}
+ingest_lock = threading.Lock()
 
 
 def fetch_tag_by_nfc_token(cur, token: str):
@@ -290,7 +298,8 @@ def register(body: RegisterRequest):
     INSERT INTO users (username, display_name, role, department, position, email,
                        password_hash, email_verified, is_active, created_at)
     VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE, %s, now())
-    RETURNING user_id, username, display_name, role, department, position, email, email_verified, is_active
+    RETURNING user_id, username, display_name, role, department, position, email,
+              email_verified, is_active, can_manage_nfc
     """
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
@@ -322,7 +331,7 @@ def register(body: RegisterRequest):
         "ok": True,
         "email_verification_sent": True,
         "user": {
-            **build_user_payload(row),
+            **build_user_payload(row, can_manage_nfc=row[9]),
             "is_active": row[8],
         },
     }
@@ -342,7 +351,7 @@ def login(body: LoginRequest):
 
     sql = """
     SELECT user_id, username, display_name, role, department, position,
-           email, email_verified, password_hash, is_active, token_version
+           email, email_verified, password_hash, is_active, token_version, can_manage_nfc
     FROM users
     WHERE username = %s
     """
@@ -368,6 +377,7 @@ def login(body: LoginRequest):
         password_hash,
         is_active,
         token_version,
+        can_manage_nfc,
     ) = row
 
     if not is_active:
@@ -402,6 +412,7 @@ def login(body: LoginRequest):
             "position": position,
             "email": email,
             "email_verified": email_verified,
+            "can_manage_nfc": bool(can_manage_nfc),
         },
     }
 
@@ -466,20 +477,24 @@ def demo_login(body: DemoLoginRequest):
     return _issue_session_for_user(row[0])
 
 
-def _issue_session_for_user(user_id: int) -> dict:
+def _issue_session_for_user(user_id: int, *, cursor=None) -> dict:
     """user_id로 로그인 세션(bearer 토큰 + user)을 발급한다."""
     sql = """
     SELECT user_id, username, display_name, role, department, position,
-           email, email_verified, is_active, token_version, is_demo
+           email, email_verified, is_active, token_version, is_demo, can_manage_nfc
     FROM users
     WHERE user_id = %s
     """
-    try:
-        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-            cur.execute(sql, (user_id,))
-            row = cur.fetchone()
-    except Exception:
-        raise HTTPException(500, "세션 발급 중 데이터베이스 오류가 발생했습니다.")
+    if cursor is None:
+        try:
+            with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+                cur.execute(sql, (user_id,))
+                row = cur.fetchone()
+        except Exception:
+            raise HTTPException(500, "세션 발급 중 데이터베이스 오류가 발생했습니다.")
+    else:
+        cursor.execute(sql, (user_id,))
+        row = cursor.fetchone()
     if not row:
         raise HTTPException(404, "사용자를 찾을 수 없습니다.")
     if not row[8]:
@@ -489,21 +504,23 @@ def _issue_session_for_user(user_id: int) -> dict:
         "ok": True,
         "token": token,
         "expires_at": expires_at,
-        "user": {**build_user_payload(row), "is_demo": bool(row[10])},
+        "user": {**build_user_payload(row, can_manage_nfc=row[11]), "is_demo": bool(row[10])},
     }
 
 
 @app.post("/auth/verify-email")
 def verify_email(body: VerifyEmailRequest):
-    consumed = consume_action_token(body.token.strip(), "email_verify")
-    if not consumed or not consumed.get("user_id"):
-        raise HTTPException(400, "유효하지 않거나 만료된 인증 링크입니다.")
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            consumed = consume_action_token(body.token.strip(), "email_verify", cursor=cur)
+            if not consumed or not consumed.get("user_id"):
+                raise HTTPException(400, "유효하지 않거나 만료된 인증 링크입니다.")
             cur.execute(
                 "UPDATE users SET email_verified = TRUE, updated_at = NOW() WHERE user_id = %s",
                 (consumed["user_id"],),
             )
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(500, "이메일 인증 처리 중 데이터베이스 오류가 발생했습니다.")
     return {"ok": True, "message": "이메일 인증이 완료되었습니다. 이제 로그인할 수 있습니다."}
@@ -567,12 +584,12 @@ def forgot_password(body: ForgotPasswordRequest):
 @app.post("/auth/reset-password")
 def reset_password(body: ResetPasswordRequest):
     password = validate_password(body.password)
-    consumed = consume_action_token(body.token.strip(), "password_reset")
-    if not consumed or not consumed.get("user_id"):
-        raise HTTPException(400, "유효하지 않거나 만료된 재설정 링크입니다.")
-    password_hash = pwd.hash(password)
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            consumed = consume_action_token(body.token.strip(), "password_reset", cursor=cur)
+            if not consumed or not consumed.get("user_id"):
+                raise HTTPException(400, "유효하지 않거나 만료된 재설정 링크입니다.")
+            password_hash = pwd.hash(password)
             # token_version 을 증가시켜 기존에 발급된 모든 세션 토큰을 무효화한다.
             cur.execute(
                 """
@@ -584,6 +601,8 @@ def reset_password(body: ResetPasswordRequest):
                 """,
                 (password_hash, consumed["user_id"]),
             )
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(500, "비밀번호 재설정 중 데이터베이스 오류가 발생했습니다.")
     return {"ok": True, "message": "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요."}
@@ -596,6 +615,11 @@ def _reject_demo_account(user: dict) -> None:
     """공개 데모 계정은 아무나 로그인하므로 계정과 설비 매핑을 바꾸지 못하게 막는다."""
     if user.get("is_demo"):
         raise HTTPException(403, "데모 계정에서는 사용할 수 없는 기능입니다.")
+
+
+def _require_nfc_write(user: dict) -> None:
+    if user.get("is_demo") or not user.get("can_manage_nfc"):
+        raise HTTPException(403, "NFC 설정 변경은 시스템 관리자에게 문의하세요.")
 
 
 def _verify_current_password(user_id: int, current_password: str) -> None:
@@ -782,6 +806,8 @@ def google_callback(
 
     _mode, redirect_target = google_oauth.verify_state(state)
     info = google_oauth.exchange_code(code)
+    if info.get("email_verified") is not True:
+        return _frontend_redirect("/", {"oauth_error": "google_email_unverified"})
     provider = "google"
 
     try:
@@ -830,7 +856,13 @@ def google_callback(
     pending = create_action_token(
         purpose="oauth_pending",
         ttl_sec=OAUTH_PENDING_TTL_SEC,
-        payload={"provider": provider, "sub": info["sub"], "email": info["email"], "name": info["name"]},
+        payload={
+            "provider": provider,
+            "sub": info["sub"],
+            "email": info["email"],
+            "email_verified": True,
+            "name": info["name"],
+        },
     )
     return _frontend_redirect(
         "/signup/complete",
@@ -840,44 +872,45 @@ def google_callback(
 
 @app.post("/auth/session/exchange")
 def session_exchange(body: SessionExchangeRequest):
-    consumed = consume_action_token(body.code.strip(), "oauth_handoff")
-    if not consumed or not consumed.get("user_id"):
-        raise HTTPException(400, "유효하지 않거나 만료된 로그인 코드입니다.")
-    return _issue_session_for_user(consumed["user_id"])
+    with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+        consumed = consume_action_token(body.code.strip(), "oauth_handoff", cursor=cur)
+        if not consumed or not consumed.get("user_id"):
+            raise HTTPException(400, "유효하지 않거나 만료된 로그인 코드입니다.")
+        return _issue_session_for_user(consumed["user_id"], cursor=cur)
 
 
 @app.post("/auth/google/complete")
 def google_complete(body: GoogleCompleteRequest):
-    consumed = consume_action_token(body.pending_token.strip(), "oauth_pending")
-    payload = consumed.get("payload") if consumed else None
-    if not payload or not payload.get("email") or not payload.get("sub"):
-        raise HTTPException(400, "유효하지 않거나 만료된 가입 요청입니다. 다시 시도해 주세요.")
-
-    provider = payload.get("provider", "google")
-    google_email = normalize_email(payload["email"])
-    google_email_verified = True  # Google userinfo email은 신뢰 가능하다고 간주
-
-    username = normalize_username(body.username)
-    display_name = normalize_display_name(body.display_name or payload.get("name") or username)
-    role = (body.role or "staff").strip().lower()
-    position = normalize_optional_text(body.position, "position")
-    department = normalize_optional_text(body.department, "department")
-
-    if role not in ("admin", "staff"):
-        raise HTTPException(400, "role은 admin 또는 staff여야 합니다.")
-    if role == "staff" and not position:
-        raise HTTPException(400, "staff 계정은 position이 필수입니다.")
-    if role == "admin":
-        position = None
-        department = None
-
-    # Google 첫 가입도 비밀번호를 필수로 받는다(아이디/비밀번호 로그인도 가능하도록).
-    if not body.password:
-        raise HTTPException(400, "비밀번호를 입력해 주세요.")
-    password_hash = pwd.hash(validate_password(body.password))
-
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            consumed = consume_action_token(body.pending_token.strip(), "oauth_pending", cursor=cur)
+            payload = consumed.get("payload") if consumed else None
+            if (
+                not payload
+                or not payload.get("email")
+                or not payload.get("sub")
+                or payload.get("email_verified") is not True
+            ):
+                raise HTTPException(400, "유효하지 않거나 만료된 가입 요청입니다. 다시 시도해 주세요.")
+
+            provider = payload.get("provider", "google")
+            google_email = normalize_email(payload["email"])
+            username = normalize_username(body.username)
+            display_name = normalize_display_name(body.display_name or payload.get("name") or username)
+            role = (body.role or "staff").strip().lower()
+            position = normalize_optional_text(body.position, "position")
+            department = normalize_optional_text(body.department, "department")
+            if role not in ("admin", "staff"):
+                raise HTTPException(400, "role은 admin 또는 staff여야 합니다.")
+            if role == "staff" and not position:
+                raise HTTPException(400, "staff 계정은 position이 필수입니다.")
+            if role == "admin":
+                position = None
+                department = None
+            if not body.password:
+                raise HTTPException(400, "비밀번호를 입력해 주세요.")
+            password_hash = pwd.hash(validate_password(body.password))
+
             cur.execute(
                 """
                 INSERT INTO users (username, display_name, role, department, position, email,
@@ -893,7 +926,7 @@ def google_complete(body: GoogleCompleteRequest):
                     position,
                     google_email,
                     password_hash,
-                    google_email_verified,
+                    True,
                 ),
             )
             new_user_id = cur.fetchone()[0]
@@ -904,6 +937,9 @@ def google_complete(body: GoogleCompleteRequest):
                 """,
                 (new_user_id, provider, payload["sub"], google_email),
             )
+            return _issue_session_for_user(new_user_id, cursor=cur)
+    except HTTPException:
+        raise
     except psycopg.errors.UniqueViolation as exc:
         constraint = str(getattr(exc, "diag", None) and exc.diag.constraint_name or "").lower()
         if "email" in constraint:
@@ -914,43 +950,58 @@ def google_complete(body: GoogleCompleteRequest):
     except Exception:
         raise HTTPException(500, "가입 처리 중 데이터베이스 오류가 발생했습니다.")
 
-    return _issue_session_for_user(new_user_id)
-
 
 @app.post("/ingest")
-def ingest(payload: Payload):
+def ingest(payload: Annotated[Payload, Depends(authenticated_ingest_payload)]):
     now = int(time.time())
     reader_id = payload.reader_id
     reader_locations = load_reader_location_map()
-    upsert_readers_from_ingest({reader_id})
     db_updates: dict[str, tuple[str, int | None, int]] = {}
 
     # 등록되지 않은 태그는 여기서 끊는다. 통과시키면 메모리 상태·Redis 캐시·실시간 화면까지
     # 전부 오염되고, 스쳐가는 외부 비콘만큼 tag_obs가 무한정 커진다.
-    registered_tag_ids = filter_registered_tag_ids({o.tag_id for o in payload.observations})
+    try:
+        registered_tag_ids = filter_registered_tag_ids({o.tag_id for o in payload.observations}, strict=True)
+    except Exception as exc:
+        raise HTTPException(503, "태그 등록 상태를 조회할 수 없습니다.") from exc
 
-    for observation in payload.observations:
-        tag_id = observation.tag_id
-        if tag_id not in registered_tag_ids:
-            continue
+    with ingest_lock:
+        staged_obs = {tag_id: copy.deepcopy(tag_obs.get(tag_id, {})) for tag_id in registered_tag_ids}
+        staged_state = {tag_id: copy.deepcopy(tag_state.get(tag_id, new_tag_state())) for tag_id in registered_tag_ids}
+        for observation in payload.observations:
+            tag_id = observation.tag_id
+            if tag_id not in registered_tag_ids:
+                continue
 
-        tag_obs.setdefault(tag_id, {})
-        tag_obs[tag_id][reader_id] = {
-            "rssi": observation.rssi,
-            "count": observation.count,
-            "last_seen": observation.last_seen,
-            "recv_ts": now,
-        }
+            staged_obs[tag_id][reader_id] = {
+                "rssi": observation.rssi,
+                "count": observation.count,
+                "last_seen": observation.last_seen,
+                "recv_ts": now,
+            }
+            transition = decide_transition(staged_obs[tag_id], staged_state[tag_id], now)
+            if transition is not None:
+                db_updates[tag_id] = transition
 
-        state = tag_state.setdefault(tag_id, new_tag_state())
-        transition = decide_transition(tag_obs[tag_id], state, now)
-        if transition is not None:
-            db_updates[tag_id] = transition
-
-    insert_location_history(db_updates, known_tag_ids=registered_tag_ids)
-    cache_location_updates(db_updates, reader_locations=reader_locations)
-    # 관측 원본이 아니라 걸러낸 집합을 쓴다 — 스쳐가는 외부 비콘의 last-seen 키가 쌓이지 않게.
-    mark_tags_seen(registered_tag_ids, now)
+        try:
+            with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+                insert_location_history(db_updates, known_tag_ids=registered_tag_ids, cursor=cur)
+                cur.execute(
+                    "UPDATE readers SET last_seen_at = NOW() "
+                    "WHERE reader_id = %s AND is_active = TRUE RETURNING reader_id",
+                    (reader_id,),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(403, "등록된 활성 리더가 아닙니다.")
+        except HTTPException:
+            raise
+        except Exception:
+            logging.getLogger("mediledger.rtls").exception("위치 이력 저장 실패")
+            raise HTTPException(500, "위치 이력 저장에 실패했습니다.")
+        tag_obs.update(staged_obs)
+        tag_state.update(staged_state)
+        cache_location_updates(db_updates, reader_locations=reader_locations)
+        mark_tags_seen(registered_tag_ids, now)
 
     return {"ok": True}
 
@@ -1048,9 +1099,11 @@ def upsert_nfc_mapping(
     body: NfcMappingUpsertRequest,
     authorization: str | None = Header(default=None),
 ):
-    _reject_demo_account(require_authenticated_user(authorization, allowed_roles={"admin"}))
+    _require_nfc_write(require_authenticated_user(authorization, allowed_roles={"admin"}))
     tag_id = body.tag_id.strip()
     token = normalize_nfc_token(body.nfc_token)
+    if not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[0-9]{3}", token):
+        raise HTTPException(400, "NFC 토큰은 소문자 영문·숫자 슬러그와 세 자리 번호여야 합니다.")
     if not tag_id:
         raise HTTPException(400, "tag_id는 필수입니다.")
 
@@ -1086,7 +1139,7 @@ def upsert_nfc_mapping(
 
 @app.delete("/admin/nfc-mappings/{tag_id}")
 def remove_nfc_mapping(tag_id: str, authorization: str | None = Header(default=None)):
-    _reject_demo_account(require_authenticated_user(authorization, allowed_roles={"admin"}))
+    _require_nfc_write(require_authenticated_user(authorization, allowed_roles={"admin"}))
     clean_tag_id = tag_id.strip()
     if not clean_tag_id:
         raise HTTPException(400, "tag_id는 필수입니다.")
@@ -1121,7 +1174,7 @@ def bind_ntag_uid(body: NtagBindingRequest, authorization: str | None = Header(d
     재실행됐을 때 이어서 진행할 수 있어야 하기 때문이다.
     """
     actor = require_authenticated_user(authorization, allowed_roles={"admin"})
-    _reject_demo_account(actor)
+    _require_nfc_write(actor)
 
     uid = body.ntag_uid.strip().upper()
     if not UID_RE.match(uid):
@@ -1174,7 +1227,7 @@ def bind_ntag_uid(body: NtagBindingRequest, authorization: str | None = Header(d
 def unbind_ntag_uid(tag_id: str, authorization: str | None = Header(default=None)):
     """바인딩을 해제한다. UID와 카운터는 지우지 않는다 — 지우면 옛 URL이 되살아난다."""
     actor = require_authenticated_user(authorization, allowed_roles={"admin"})
-    _reject_demo_account(actor)
+    _require_nfc_write(actor)
 
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
@@ -1560,6 +1613,10 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
     reader_locations = load_reader_location_map()
     active_tag_ids = load_active_tag_ids()
     cached_locations = load_all_cached_tag_locations()
+    if cached_locations is not None:
+        obsolete_tag_ids = set(cached_locations) - active_tag_ids
+        delete_tag_caches(obsolete_tag_ids)
+        cached_locations = {tag_id: value for tag_id, value in cached_locations.items() if tag_id in active_tag_ids}
 
     if cached_locations is None:
         # Redis 장애 — 활성 태그 전부를 DB에서 태그별 최신 1건으로 조회
@@ -1583,8 +1640,7 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
         )
         merged_locations = {**db_locations, **cached_locations}
 
-    # 전체 활성 태그 로스터 = (등록된 활성 태그) ∪ (위치가 잡힌 태그)
-    roster_tag_ids = active_tag_ids | set(merged_locations.keys())
+    roster_tag_ids = active_tag_ids
     tag_metadata = load_tag_metadata(roster_tag_ids)
     tag_last_seen = load_tags_last_seen(roster_tag_ids)
 

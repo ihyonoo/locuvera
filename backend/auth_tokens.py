@@ -55,7 +55,7 @@ def create_action_token(
     return raw_token
 
 
-def consume_action_token(raw_token: str, purpose: str) -> dict | None:
+def consume_action_token(raw_token: str, purpose: str, *, cursor=None) -> dict | None:
     """토큰을 검증하고 일회성으로 소비한다.
 
     유효하면 {token_id, user_id, payload} 를 반환하고, 만료/사용/불일치면 None.
@@ -64,10 +64,13 @@ def consume_action_token(raw_token: str, purpose: str) -> dict | None:
         return None
     token_hash = _hash_token(raw_token)
 
-    with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-        # 만료되지 않고 아직 사용되지 않은 토큰만 원자적으로 소비한다.
-        cur.execute(
-            """
+    if cursor is None:
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            return consume_action_token(raw_token, purpose, cursor=cur)
+
+    # 만료되지 않고 아직 사용되지 않은 토큰만 원자적으로 소비한다.
+    cursor.execute(
+        """
             UPDATE auth_action_tokens
             SET used_at = NOW()
             WHERE token_hash = %s
@@ -76,9 +79,9 @@ def consume_action_token(raw_token: str, purpose: str) -> dict | None:
               AND expires_at > NOW()
             RETURNING token_id, user_id, payload
             """,
-            (token_hash, purpose),
-        )
-        row = cur.fetchone()
+        (token_hash, purpose),
+    )
+    row = cursor.fetchone()
 
     if not row:
         return None

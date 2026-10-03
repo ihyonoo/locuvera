@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -34,6 +35,8 @@ def normalize_display_name(raw: str) -> str:
         raise HTTPException(400, "display_name은 비어 있을 수 없습니다.")
     if len(display_name) > 50:
         raise HTTPException(400, "display_name은 50자를 초과할 수 없습니다.")
+    if re.match(r"^[\s\x00-\x1f\x7f]*[=+\-@]", display_name):
+        raise HTTPException(400, "display_name은 수식으로 해석되는 문자로 시작할 수 없습니다.")
     return display_name
 
 
@@ -112,12 +115,15 @@ def decode_auth_token(token: str) -> dict:
     except ValueError as exc:
         raise HTTPException(401, "인증 토큰 형식이 올바르지 않습니다.") from exc
 
-    expected_signature = hmac.new(
-        AUTH_TOKEN_SECRET.encode("utf-8"),
-        payload_segment.encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    actual_signature = decode_token_segment(signature_segment)
+    try:
+        expected_signature = hmac.new(
+            AUTH_TOKEN_SECRET.encode("utf-8"),
+            payload_segment.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        actual_signature = decode_token_segment(signature_segment)
+    except (UnicodeError, ValueError, binascii.Error) as exc:
+        raise HTTPException(401, "인증 토큰 형식이 올바르지 않습니다.") from exc
     if not hmac.compare_digest(expected_signature, actual_signature):
         raise HTTPException(401, "인증 토큰 검증에 실패했습니다.")
 
@@ -141,7 +147,7 @@ def decode_auth_token(token: str) -> dict:
     return payload
 
 
-def build_user_payload(row) -> dict:
+def build_user_payload(row, *, can_manage_nfc: bool = False) -> dict:
     # row 컬럼 순서 계약: user_id, username, display_name, role, department, position, email, email_verified
     return {
         "user_id": row[0],
@@ -152,13 +158,14 @@ def build_user_payload(row) -> dict:
         "position": row[5],
         "email": row[6],
         "email_verified": row[7],
+        "can_manage_nfc": bool(can_manage_nfc),
     }
 
 
 def fetch_user_by_id(user_id: int):
     sql = """
     SELECT user_id, username, display_name, role, department, position,
-           email, email_verified, is_active, token_version, is_demo
+           email, email_verified, is_active, token_version, is_demo, can_manage_nfc
     FROM users
     WHERE user_id = %s
     LIMIT 1
@@ -192,7 +199,7 @@ def require_authenticated_user(
     if int(payload.get("tv", 0)) != int(row[9]):
         raise HTTPException(401, "인증 토큰이 더 이상 유효하지 않습니다. 다시 로그인해 주세요.")
 
-    user = build_user_payload(row)
+    user = build_user_payload(row, can_manage_nfc=row[11])
     # row[10]=is_demo (fetch_user_by_id 컬럼 순서 기준) — 데모 계정 가드가 이 값을 본다.
     user["is_demo"] = bool(row[10])
     role = str(user["role"]).lower()

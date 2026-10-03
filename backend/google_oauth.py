@@ -159,6 +159,6 @@ def exchange_code(code: str) -> dict:
     return {
         "sub": str(sub),
         "email": str(email).strip().lower(),
-        "email_verified": bool(info.get("email_verified", False)),
+        "email_verified": info.get("email_verified") is True,
         "name": info.get("name") or "",
     }

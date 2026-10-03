@@ -21,8 +21,9 @@ BLE 하드웨어가 필요하다(`bleak` 라이브러리 사용).
 
 - `RTLS_SERVER_URL` — 백엔드 API 주소
 - `RTLS_READER_ID` — 리더별 고유 ID(기기마다 다름)
+- `RTLS_READER_KEY` — 해당 리더의 요청 서명 키. 백엔드 루트 `.env`의 `RTLS_REAL_READER_KEYS`에서 같은 ID에 등록한 키와 일치해야 한다
 
-`.env.example`을 복사해 기기별로 값을 채운다.
+`.env.example`을 복사해 기기별로 값을 채운다. 리더마다 서로 다른 키를 사용한다. 리더 시각이 틀려도 서버의 HTTP `Date` 응답으로 다음 요청의 서명 시각을 보정하지만, 운영체제 시각 동기화도 유지한다.
 
 ## 관련 문서
 

@@ -1,9 +1,14 @@
 # send_to_server.py
 
 import asyncio
+import hashlib
+import hmac
+import json
 import os
+import secrets
 import statistics
 import time
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
@@ -15,6 +20,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SERVER_URL = os.getenv("RTLS_SERVER_URL", "http://127.0.0.1:8000/ingest")  # Server IP
 READER_ID = os.getenv("RTLS_READER_ID", "M501")  # Reader의 논리적 ID
+READER_KEY = os.getenv("RTLS_READER_KEY", "")
 
 # 윈도우를 사용하는 이유: RSSI의 튐 현상, 노이즈 감소를 위해
 WINDOW_SEC = 5.0  # 수집 윈도우(최근 5초 동안의 RSSI를 수집)
@@ -66,6 +72,7 @@ def on_scan(device, adv):
 
 # 가공 후 서버로 전송 루프
 async def sender_loop():
+    server_time_offset = 0
     while True:
         now = int(time.time())  # 현재 시간 계산
         cutoff = now - int(WINDOW_SEC)  # Window만큼 자르기
@@ -73,11 +80,11 @@ async def sender_loop():
         observations = []  # 서버로 보낼 태그별 요약값 리스트
         for tag_id, samples in list(tag_samples.items()):  # 현재 버퍼의 모든 태그에 대해 처리
             samples = [(t, r) for (t, r) in samples if t >= cutoff]  # 윈도우 밖 데이터 제거
-            tag_samples[tag_id] = samples  # 버퍼 갱신
-
             # 샘플이 없는 태그는 전송 대상에서 제외
             if not samples:
+                tag_samples.pop(tag_id, None)
                 continue
+            tag_samples[tag_id] = samples
 
             rssis = [r for (_, r) in samples]  # RSSI 값만 추출
             rssi_med = int(statistics.median(rssis))  # 중앙값 계산
@@ -89,26 +96,47 @@ async def sender_loop():
                     "tag_id": tag_id,  # tag_id
                     "rssi": rssi_med,  # RSSI의 중앙값
                     "count": len(rssis),  # window 내 샘플 개수(신뢰도)
-                    "last_seen": last_seen,  # 마지막 수신 시간
+                    "last_seen": last_seen + server_time_offset,  # 마지막 수신 시간
                 }
             )
 
         # HTTP 전송
         if observations:  # 전송할 데이터가 있다면
+            if not READER_KEY:
+                raise RuntimeError("RTLS_READER_KEY가 설정되지 않았습니다.")
             # 서버로 보낼 전체 페이로드 구성
             payload = {
                 "reader_id": READER_ID,  # 리더기 ID
-                "ts": now,  # 전송 시각
+                "ts": now + server_time_offset,  # 전송 시각
                 "observations": observations,  # 태그별 요약 리스트
             }
 
-            # 서버 전송 예외 처리
+            body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            timestamp = str(int(time.time()) + server_time_offset)
+            nonce = secrets.token_hex(16)
+            message = f"v1\n{READER_ID}\n{timestamp}\n{nonce}\n{hashlib.sha256(body).hexdigest()}".encode("ascii")
+            signature = hmac.new(READER_KEY.encode("utf-8"), message, hashlib.sha256).hexdigest()
+            headers = {
+                "Content-Type": "application/json",
+                "X-RTLS-Reader-ID": READER_ID,
+                "X-RTLS-Timestamp": timestamp,
+                "X-RTLS-Nonce": nonce,
+                "X-RTLS-Signature": signature,
+            }
+
             try:
-                # HTTP POST 요청 전송, JSON 바디로 자동 직렬화, 2초 안에 응답 없으면 예외 발생
-                requests.post(SERVER_URL, json=payload, timeout=2)
-            except Exception as e:
-                # 네트워크 불안정 시에도 스캐닝은 계속되어야 하므로 예외만 삼킴
-                print("send fail:", e)  # 로그 출력
+                response = await asyncio.to_thread(requests.post, SERVER_URL, data=body, headers=headers, timeout=2)
+                server_date = getattr(response, "headers", {}).get("Date")
+                if server_date:
+                    try:
+                        parsed_date = parsedate_to_datetime(server_date)
+                        if parsed_date.tzinfo is not None:
+                            server_time_offset = round(parsed_date.timestamp() - time.time())
+                    except (TypeError, ValueError, OverflowError):
+                        pass
+                response.raise_for_status()
+            except requests.RequestException as exc:
+                print("send fail:", exc)
 
         # 비동기 방식으로 1초 대기 후 다시 실행(전체 프로그램이 멈추는 게 아니라 해당 함수만 sleep)
         await asyncio.sleep(SEND_EVERY_SEC)

@@ -5,7 +5,12 @@
 항상 하나씩만 호출하게 만든다 — 이 클라이언트 자체는 동시성을 제어하지 않는다.
 """
 
-import contextlib
+import asyncio
+import hashlib
+import hmac
+import json
+import logging
+import secrets
 import time
 
 import httpx
@@ -20,8 +25,38 @@ class ApiClient:
         self._tokens: dict[str, tuple[str, float]] = {}
 
     async def ingest(self, payload: dict) -> None:
-        with contextlib.suppress(httpx.HTTPError):
-            await self._client.post("/ingest", json=payload, timeout=config.INGEST_TIMEOUT_SEC)
+        if not config.RTLS_SIM_KEY:
+            raise RuntimeError("RTLS_SIM_KEY가 설정되지 않았습니다.")
+        reader_id = payload["reader_id"]
+        body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        reader_key = hmac.new(
+            config.RTLS_SIM_KEY.encode("utf-8"), f"rtls-sim-v1:{reader_id}".encode("ascii"), hashlib.sha256
+        ).digest()
+        body_hash = hashlib.sha256(body).hexdigest()
+        for attempt in range(3):
+            timestamp = str(int(time.time()))
+            nonce = secrets.token_hex(16)
+            message = f"v1\n{reader_id}\n{timestamp}\n{nonce}\n{body_hash}".encode("ascii")
+            signature = hmac.new(reader_key, message, hashlib.sha256).hexdigest()
+            headers = {
+                "Content-Type": "application/json",
+                "X-RTLS-Reader-ID": reader_id,
+                "X-RTLS-Timestamp": timestamp,
+                "X-RTLS-Nonce": nonce,
+                "X-RTLS-Signature": signature,
+            }
+            try:
+                response = await self._client.post(
+                    "/ingest", content=body, headers=headers, timeout=config.INGEST_TIMEOUT_SEC
+                )
+            except httpx.TransportError:
+                logging.getLogger("simulation.api_client").warning("RTLS 전송 실패", exc_info=True)
+                return
+            if response.status_code in (429, 503) and attempt < 2:
+                await asyncio.sleep(0.25 * (attempt + 1))
+                continue
+            response.raise_for_status()
+            return
 
     async def login(self, username: str, password: str) -> str:
         cached = self._tokens.get(username)

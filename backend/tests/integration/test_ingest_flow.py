@@ -4,14 +4,46 @@
 backend/settings.py 기준 HYST_DB=10, DWELL_SEC=3, STALE_SEC=5.
 """
 
-from backend.server import tag_state
+import pytest
+from fastapi.testclient import TestClient
+
+from backend.server import app, tag_obs, tag_state
+from backend.tests.conftest import post_signed_ingest
+
+
+@pytest.fixture(autouse=True)
+def _registered_readers(seed_reader):
+    seed_reader("M503")
+    seed_reader("M504")
+
+
+def test_history_failure_does_not_publish_location_or_memory_state(seed_tag, monkeypatch):
+    tag_id = seed_tag()
+    monkeypatch.setattr(
+        "backend.server.insert_location_history",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("database unavailable")),
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = post_signed_ingest(
+        client,
+        {
+            "reader_id": "M503",
+            "ts": 100,
+            "observations": [{"tag_id": tag_id, "rssi": -60, "count": 1, "last_seen": 100}],
+        },
+    )
+
+    assert response.status_code == 500
+    assert tag_id not in tag_obs
+    assert tag_id not in tag_state
 
 
 def _post_ingest(client, monkeypatch, *, now, reader_id, tag_id, rssi):
     monkeypatch.setattr("backend.server.time.time", lambda: float(now))
-    response = client.post(
-        "/ingest",
-        json={
+    response = post_signed_ingest(
+        client,
+        {
             "reader_id": reader_id,
             "ts": now,
             "observations": [{"tag_id": tag_id, "rssi": rssi, "count": 1, "last_seen": now}],

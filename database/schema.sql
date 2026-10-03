@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     position TEXT,
     password_hash TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    can_manage_nfc BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT users_staff_requires_position
@@ -198,6 +199,18 @@ ALTER TABLE users
 -- 이 플래그로 막아, 방문자가 데모 계정 자체를 망가뜨리지 못하게 한다.
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- 기존 일반 관리자만 NFC 설정 변경 권한을 유지한다. 재실행 시 신규 관리자를 승격하지 않는다.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'can_manage_nfc'
+    ) THEN
+        ALTER TABLE users ADD COLUMN can_manage_nfc BOOLEAN NOT NULL DEFAULT FALSE;
+        UPDATE users SET can_manage_nfc = TRUE WHERE role = 'admin' AND is_demo = FALSE;
+    END IF;
+END $$;
 
 -- Google 전용 가입 계정은 비밀번호가 없을 수 있으므로 password_hash를 NULL 허용으로 완화한다.
 ALTER TABLE users

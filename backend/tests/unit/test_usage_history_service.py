@@ -20,11 +20,43 @@ class TestIsBesuReady:
         deployment_path.write_text("{}")
         monkeypatch.setattr(svc, "BESU_DIR", besu_dir)
         monkeypatch.setattr(svc, "BESU_DEPLOYMENT_PATH", deployment_path)
+        monkeypatch.setenv("BESU_SENDER_PRIVATE_KEY", "0x" + "12" * 32)
+        monkeypatch.setenv("BESU_SENDER_ADDRESS", "0x" + "34" * 20)
 
-        ready, reason = svc.is_besu_ready()
+        ready, reason = svc.is_besu_ready(require_signer=True)
 
         assert ready is True
         assert reason is None
+
+    def test_not_ready_when_sender_key_is_missing(self, tmp_path, monkeypatch):
+        besu_dir = tmp_path / "besu"
+        (besu_dir / "node_modules").mkdir(parents=True)
+        deployment_path = besu_dir / "deployments" / "usage-registry.json"
+        deployment_path.parent.mkdir(parents=True)
+        deployment_path.write_text("{}")
+        monkeypatch.setattr(svc, "BESU_DIR", besu_dir)
+        monkeypatch.setattr(svc, "BESU_DEPLOYMENT_PATH", deployment_path)
+        monkeypatch.delenv("BESU_SENDER_PRIVATE_KEY", raising=False)
+        monkeypatch.delenv("BESU_SENDER_ADDRESS", raising=False)
+
+        ready, reason = svc.is_besu_ready(require_signer=True)
+
+        assert ready is False
+        assert "BESU_SENDER_PRIVATE_KEY" in reason
+
+    def test_read_remains_ready_without_sender_key(self, tmp_path, monkeypatch):
+        besu_dir = tmp_path / "besu"
+        (besu_dir / "node_modules").mkdir(parents=True)
+        deployment_path = besu_dir / "deployments" / "usage-registry.json"
+        deployment_path.parent.mkdir(parents=True)
+        deployment_path.write_text("{}")
+        monkeypatch.setattr(svc, "BESU_DIR", besu_dir)
+        monkeypatch.setattr(svc, "BESU_DEPLOYMENT_PATH", deployment_path)
+        monkeypatch.delenv("BESU_SENDER_PRIVATE_KEY", raising=False)
+        monkeypatch.delenv("BESU_SENDER_ADDRESS", raising=False)
+
+        assert svc.is_besu_ready() == (True, None)
+        assert svc.is_besu_ready(require_signer=True)[0] is False
 
     def test_not_ready_when_deployment_file_missing(self, tmp_path, monkeypatch):
         besu_dir = tmp_path / "besu"
@@ -130,7 +162,7 @@ class TestRunBesuScript:
 
 class TestReadUsageRecordFromChain:
     def test_not_configured_when_besu_not_ready(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (False, "이유"))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (False, "이유"))
         calls = []
         monkeypatch.setattr(svc, "run_besu_script", lambda *a, **k: calls.append(a) or (True, "{}", ""))
 
@@ -141,7 +173,7 @@ class TestReadUsageRecordFromChain:
         assert calls == []
 
     def test_read_error_when_script_fails(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "run_besu_script", lambda *a, **k: (False, "", "node error"))
 
         result = svc.read_usage_record_from_chain(1)
@@ -151,7 +183,7 @@ class TestReadUsageRecordFromChain:
         assert result["exists"] is False
 
     def test_read_error_on_invalid_json(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "run_besu_script", lambda *a, **k: (True, "not-json", ""))
 
         result = svc.read_usage_record_from_chain(1)
@@ -159,7 +191,7 @@ class TestReadUsageRecordFromChain:
         assert result["status"] == "read_error"
 
     def test_ok_when_script_succeeds(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         payload = {"exists": True, "usageId": "1"}
         monkeypatch.setattr(svc, "run_besu_script", lambda *a, **k: (True, json.dumps(payload), ""))
 
@@ -216,7 +248,7 @@ def _payload(**overrides):
 
 class TestAnchorUsageRecordToChain:
     def test_not_configured_when_besu_not_ready_and_no_io_happens(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (False, "이유"))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (False, "이유"))
         fetch_calls = []
         run_calls = []
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: fetch_calls.append(uid))
@@ -229,7 +261,7 @@ class TestAnchorUsageRecordToChain:
         assert run_calls == []
 
     def test_missing_usage_when_fetch_returns_none(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: None)
 
         result = svc.anchor_usage_record_to_chain(1)
@@ -239,7 +271,7 @@ class TestAnchorUsageRecordToChain:
 
     def test_already_anchored_when_onchain_record_matches(self, monkeypatch):
         payload = _payload()
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: dict(payload))
         monkeypatch.setattr(
             svc,
@@ -258,7 +290,7 @@ class TestAnchorUsageRecordToChain:
     def test_mismatch_when_onchain_record_differs(self, monkeypatch):
         payload = _payload()
         onchain = _payload(tagId="다른-태그")
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: dict(payload))
         monkeypatch.setattr(
             svc,
@@ -281,7 +313,7 @@ class TestAnchorUsageRecordToChain:
             "transactionIndex": 0,
             "recordedAt": 1_700_003_601,
         }
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: dict(payload))
         monkeypatch.setattr(
             svc,
@@ -309,7 +341,7 @@ class TestAnchorUsageRecordToChain:
 
     def test_record_error_when_script_fails(self, monkeypatch):
         payload = _payload()
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: dict(payload))
         monkeypatch.setattr(
             svc,
@@ -326,7 +358,7 @@ class TestAnchorUsageRecordToChain:
 
     def test_record_error_on_invalid_json_response(self, monkeypatch):
         payload = _payload()
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         monkeypatch.setattr(svc, "fetch_usage_record_for_chain", lambda uid: dict(payload))
         monkeypatch.setattr(
             svc,
@@ -343,7 +375,7 @@ class TestAnchorUsageRecordToChain:
 
 class TestVerifyUsageHistoryIntegrity:
     def test_not_ready_degrades_without_subprocess_call(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (False, "이유"))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (False, "이유"))
         calls = []
         monkeypatch.setattr(svc, "run_besu_script", lambda *a, **k: calls.append(a) or (True, "{}", ""))
         rows = [(1, "returned") + (None,) * 23]
@@ -356,7 +388,7 @@ class TestVerifyUsageHistoryIntegrity:
         assert summary["not_eligible_count"] == 0
 
     def test_not_eligible_rows_skip_chain_check(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         calls = []
 
         def fake_run(*a, **k):
@@ -374,7 +406,7 @@ class TestVerifyUsageHistoryIntegrity:
 
     # 한 번에 다 넘기면 100건에 6초라 601건이면 30초 타임아웃을 넘긴다. 배치로 쪼개 호출한다.
     def test_splits_large_batches_across_multiple_script_calls(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         batches = []
 
         def fake_run(script, *args, stdin_payload=None, **kwargs):
@@ -403,7 +435,7 @@ class TestVerifyUsageHistoryIntegrity:
         assert summary["verified_count"] == 250
 
     def test_one_failing_batch_does_not_void_the_others(self, monkeypatch):
-        monkeypatch.setattr(svc, "is_besu_ready", lambda: (True, None))
+        monkeypatch.setattr(svc, "is_besu_ready", lambda **_kwargs: (True, None))
         seen = {"calls": 0}
 
         def fake_run(script, *args, stdin_payload=None, **kwargs):

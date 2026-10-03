@@ -32,6 +32,7 @@ python -m simulation.simulator    # 상시 가동 시작
 | `DATABASE_URL` | `apply_seed` 전용. 시뮬레이터 런타임은 DB에 접근하지 않는다 |
 | `REDIS_URL` | `apply_seed`가 재시드 시 태그 위치 캐시(`rtls:tag:*`)를 정리하는 데 쓴다 |
 | `SIM_STAFF_PASSWORD` | 시뮬레이션 staff 120계정 공통 비밀번호. 없으면 시뮬레이터가 즉시 종료된다 |
+| `RTLS_SIM_KEY` | `/ingest` 요청 서명 키. 백엔드 루트 `.env`의 값과 동일해야 한다 |
 | `SIM_RANDOM_SEED` | 비우면 매 기동이 다른 궤적을 그린다. 값을 주면 재현 가능해진다(디버깅용) |
 
 ## 모델 요약

@@ -17,6 +17,7 @@ BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mediledger:mediledger@localhost:5432/mediledger_db")
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 SIM_STAFF_PASSWORD = os.getenv("SIM_STAFF_PASSWORD")
+RTLS_SIM_KEY = os.getenv("RTLS_SIM_KEY", "")
 
 HTTP_TIMEOUT_SEC = float(os.getenv("SIM_HTTP_TIMEOUT_SEC", "10"))
 INGEST_TIMEOUT_SEC = float(os.getenv("SIM_INGEST_TIMEOUT_SEC", "5"))
