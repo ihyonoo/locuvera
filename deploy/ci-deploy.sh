@@ -7,18 +7,31 @@
 set -euo pipefail
 
 main() {
-  cd /home/homeserver/project/mediledger
+  local sha="${SSH_ORIGINAL_COMMAND:-}"
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[ci-deploy] 40자리 커밋 SHA가 필요하다" >&2
+    exit 1
+  fi
+  cd "${CI_DEPLOY_ROOT:-/home/homeserver/project/mediledger}"
 
-  echo "[ci-deploy] $(date -Iseconds) start (sha requested: ${1:-unknown})"
+  echo "[ci-deploy] $(date -Iseconds) start (sha requested: $sha)"
 
   # 코드/설정 동기화. 이미지는 여기서 빌드하지 않는다.
   # .env, blockchain/besu/.env, config/genesis.json, validators/*/data,
   # deployments/*.json 은 전부 gitignore 대상이라 아래 명령으로 건드려지지 않는다.
   git fetch origin main
-  git pull --ff-only origin main
+  git cat-file -e "$sha^{commit}"
+  git merge-base --is-ancestor "$sha" origin/main
+  git merge-base --is-ancestor HEAD "$sha"
 
-  # backend/web/simulator 최신 이미지만 GHCR에서 pull한다. public 패키지라 로그인 불필요.
-  docker compose pull backend web simulator
+  export DEPLOY_IMAGE_TAG="sha-$sha"
+  # 현재 체크아웃의 Compose 파일이 아직 최신이 아니어도 SHA 이미지를 확인한다.
+  docker pull "ghcr.io/ihyonoo/mediledger-equiptrace-backend:$DEPLOY_IMAGE_TAG"
+  docker pull "ghcr.io/ihyonoo/mediledger-equiptrace-web:$DEPLOY_IMAGE_TAG"
+  docker pull "ghcr.io/ihyonoo/mediledger-equiptrace-simulator:$DEPLOY_IMAGE_TAG"
+
+  # 요청된 커밋까지만 소스를 전진시킨다.
+  git merge --ff-only "$sha"
 
   # backend/web/simulator만 재생성한다.
   # postgres/redis/cloudflared/besu는 --no-deps로 그대로 둔다.
@@ -30,4 +43,4 @@ main() {
   echo "[ci-deploy] $(date -Iseconds) done"
 }
 
-main "$@"
+main
