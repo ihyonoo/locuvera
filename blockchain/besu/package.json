@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "deploy:usage-registry": "node scripts/deploy-usage-registry.mjs",
+    "rotate:recorder": "node scripts/rotate-recorder.mjs",
     "record:usage-record": "node scripts/record-usage-record.mjs",
     "read:usage-record": "node scripts/read-usage-record.mjs",
     "test": "node --test scripts/*.test.mjs"
@@ -11,5 +12,8 @@
   "dependencies": {
     "ethers": "^6.13.5",
     "solc": "^0.8.30"
+  },
+  "devDependencies": {
+    "ganache": "^7.9.2"
   }
 }

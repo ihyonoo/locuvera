@@ -3,14 +3,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import solc from 'solc';
 import { ethers } from 'ethers';
+import { requirePrivateKey, requireSenderAddress } from './besu-keys.mjs';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT_PATH = path.join(ROOT_DIR, 'contracts', 'UsageRecordRegistry.sol');
 const DEPLOYMENT_PATH = path.join(ROOT_DIR, 'deployments', 'usage-registry.json');
 const RPC_URL = process.env.BESU_RPC_URL ?? 'http://127.0.0.1:8549';
 const CHAIN_ID = Number(process.env.BESU_CHAIN_ID ?? '1337');
-const SENDER_PRIVATE_KEY =
-  process.env.BESU_SENDER_PRIVATE_KEY ?? 'ae6ae8e5ccbfb04590405997ee2d52d2b330726137b875053c36d94e974d162f';
+const SENDER_PRIVATE_KEY = requirePrivateKey('BESU_SENDER_PRIVATE_KEY');
+requireSenderAddress(process.env, SENDER_PRIVATE_KEY);
 
 function compileContract() {
   // 배포 파일에는 ABI만 따로 저장하지 않기 때문에, 전송 시점에 계약을 다시 해석한다.

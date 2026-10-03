@@ -81,6 +81,8 @@ node scripts/deploy-usage-registry.mjs
 
 배포 결과는 `deployments/usage-registry.json`에 저장됩니다.
 
+기록자 키를 바꿀 때는 새 주소에 가스 비용을 충전하고, 반납 요청을 처리하는 백엔드를 먼저 정지합니다. 기존 배포자 키로 `BESU_NEW_RECORDER_ADDRESS=<새 주소> npm run rotate:recorder`를 실행하면 온체인 변경과 `deployments/usage-registry.json`의 기록자 변경 이력을 함께 저장합니다. 백엔드의 `BESU_SENDER_PRIVATE_KEY`와 `BESU_SENDER_ADDRESS`를 새 기록자로 바꾼 뒤 재시작하고, 전환 중 누락된 앵커가 없는지 확인합니다. 변경 이력 파일을 잃으면 이전 기록의 작성자 검증에 필요한 시점 정보도 잃으므로 백업합니다.
+
 사용 완료 레코드 기록:
 
 ```bash

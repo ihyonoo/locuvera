@@ -1,6 +1,24 @@
 pragma solidity ^0.8.20;
 
 contract UsageRecordRegistry {
+    address public owner;
+    address public recorder;
+
+    event RecorderChanged(address indexed previousRecorder, address indexed newRecorder);
+
+    constructor(address initialRecorder) {
+        require(initialRecorder != address(0), "recorder required");
+        owner = msg.sender;
+        recorder = initialRecorder;
+    }
+
+    function setRecorder(address newRecorder) external {
+        require(msg.sender == owner, "owner only");
+        require(newRecorder != address(0), "recorder required");
+        emit RecorderChanged(recorder, newRecorder);
+        recorder = newRecorder;
+    }
+
     struct MovementPoint {
         string location;
         uint64 at;
@@ -46,6 +64,7 @@ contract UsageRecordRegistry {
         uint64 returnedAt,
         MovementPoint[] calldata movementPath
     ) external {
+        require(msg.sender == recorder, "recorder only");
         require(bytes(usageId).length > 0, "usageId required");
         require(bytes(tagId).length > 0, "tagId required");
         require(checkoutUserId > 0, "checkoutUserId required");
