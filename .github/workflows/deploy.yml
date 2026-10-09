@@ -92,13 +92,13 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
-      - name: Trust homeserver host key
+      - name: Trust deploy server host key
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -p 22 "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Run remote deploy
-        # 홈서버 authorized_keys의 forced-command(deploy/ci-deploy.sh)가
+        # 운영 서버 authorized_keys의 forced-command(deploy/ci-deploy.sh)가
         # 실행 명령을 고정하고 여기 전달한 SHA를 서버에서 검증한다.
         # exit code만 forced-command 결과가 그대로 전달된다.
         run: |

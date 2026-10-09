@@ -1,4 +1,4 @@
-# docker-compose.yml (저장소 루트) — 홈서버 상시 배포용
+# docker-compose.yml (저장소 루트) — 운영 서버 상시 배포용
 # 로컬 개발용이 아님. 로컬 개발은 docker-compose.dev.yml을 사용.
 
 # 이 Compose 프로젝트의 이름.
@@ -37,7 +37,7 @@ services:
 
   backend:
     # 이미지는 GitHub Actions CI가 빌드해 GHCR에 push한다.
-    # 홈서버는 이 태그를 pull만 하며 docker compose build를 쓰지 않는다.
+    # 운영 서버는 이 태그를 pull만 하며 docker compose build를 쓰지 않는다.
     # .github/workflows/deploy.yml, deploy/ci-deploy.sh 참고.
     image: ghcr.io/ihyonoo/mediledger-equiptrace-backend:${DEPLOY_IMAGE_TAG:-latest}
     container_name: mediledger-backend
@@ -55,10 +55,6 @@ services:
     depends_on:
       - postgres
       - redis
-    ports:
-      # 리더기(LAN) 직결용.
-      # 특정 호스트 IP에만 바인딩해 인터넷에는 노출되지 않음.
-      - "192.168.0.53:8000:8000"
     networks:
       - besu-qbft
       - simulator-api
@@ -69,7 +65,7 @@ services:
     container_name: mediledger-simulator
     restart: unless-stopped
     environment:
-      # 컨테이너 네트워크 내부 DNS로 backend에 접근 (호스트 전용 8000 포트가 아님).
+      # 컨테이너 네트워크 내부 DNS로 backend에 접근.
       BACKEND_BASE_URL: http://backend:8000
       SIM_STAFF_PASSWORD: ${SIM_STAFF_PASSWORD:?SIM_STAFF_PASSWORD required}
       RTLS_SIM_KEY: ${RTLS_SIM_KEY:?RTLS_SIM_KEY required}
@@ -95,7 +91,6 @@ services:
       - backend
     networks:
       - besu-qbft
-      - analytics
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -119,8 +114,5 @@ networks:
     # 실제 driver·subnet 설정은 include된 besu 스택 쪽에 있음.
     # 여기서는 외부 네트워크가 아님을 명시.
     external: false
-  analytics:
-    name: analytics
-    external: true
   simulator-api:
     driver: bridge
