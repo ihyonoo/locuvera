@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 홈서버 authorized_keys의 forced-command로만 실행되는 배포 스크립트.
+# 운영 서버 authorized_keys의 forced-command로만 실행되는 배포 스크립트.
 # GitHub Actions가 보낸 커맨드 인자는 sshd가 무시하고 이 스크립트만 실행한다.
 # 함수로 감싸고 맨 끝에서 한 번만 호출한다.
 # git pull이 이 파일 자체를 덮어써도 이번 실행 로직에는 영향이 없다.
@@ -12,7 +12,7 @@ main() {
     echo "[ci-deploy] 40자리 커밋 SHA가 필요하다" >&2
     exit 1
   fi
-  cd "${CI_DEPLOY_ROOT:-/home/homeserver/project/mediledger}"
+  cd "${CI_DEPLOY_ROOT:-/home/hwdev/project/mediledger}"
 
   echo "[ci-deploy] $(date -Iseconds) start (sha requested: $sha)"
 
