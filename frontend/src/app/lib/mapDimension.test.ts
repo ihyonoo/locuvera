@@ -73,9 +73,21 @@ describe('isWebGLAvailable', () => {
   it('reports true when the browser can create a webgl context', () => {
     vi.stubGlobal('WebGLRenderingContext', function WebGLRenderingContext() {});
     const canvas = document.createElement('canvas');
-    vi.spyOn(canvas, 'getContext').mockImplementation(((kind: string) => (kind === 'webgl2' ? {} : null)) as never);
+    const gl = { getExtension: () => null };
+    vi.spyOn(canvas, 'getContext').mockImplementation(((kind: string) => (kind === 'webgl2' ? gl : null)) as never);
     vi.spyOn(document, 'createElement').mockReturnValue(canvas);
     expect(isWebGLAvailable()).toBe(true);
+  });
+
+  it('releases the probe context right away so it does not count against the browser limit', () => {
+    vi.stubGlobal('WebGLRenderingContext', function WebGLRenderingContext() {});
+    const loseContext = vi.fn();
+    const gl = { getExtension: (name: string) => (name === 'WEBGL_lose_context' ? { loseContext } : null) };
+    const canvas = document.createElement('canvas');
+    vi.spyOn(canvas, 'getContext').mockImplementation(((kind: string) => (kind === 'webgl2' ? gl : null)) as never);
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+    expect(isWebGLAvailable()).toBe(true);
+    expect(loseContext).toHaveBeenCalledTimes(1);
   });
 
   it('reports false when creating the context fails', () => {

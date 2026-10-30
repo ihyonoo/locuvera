@@ -12,7 +12,10 @@ export function isWebGLAvailable(): boolean {
   if (typeof WebGLRenderingContext === 'undefined') return false;
   try {
     const canvas = document.createElement('canvas');
-    return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
+    const gl = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext | null;
+    // 확인용 컨텍스트는 바로 놓아, 브라우저의 동시 컨텍스트 한도에 남지 않게 한다
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return Boolean(gl);
   } catch {
     return false;
   }
