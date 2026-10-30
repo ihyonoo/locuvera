@@ -1,4 +1,4 @@
-// 3D 지도 실행체: three.js 장면·카메라·후처리와 장비 점·이름표 DOM. React(FloorMap3D)는 생성·갱신·해제만 맡는다.
+// 3D 지도 실행체: three.js 장면·카메라·후처리·장비 구슬과, 이름표·누르는 영역 DOM. React(FloorMap3D)는 생성·갱신·해제만 맡는다.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -6,25 +6,58 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { createQualityGovernor, placeTagLabels, tagColors, type QualityLevel } from '../../lib/floor3d/runtime';
+import {
+  createQualityGovernor,
+  placeTagLabels,
+  tagColors,
+  worldPerPixel,
+  type QualityLevel,
+} from '../../lib/floor3d/runtime';
 import { disposeGeometries, type buildFloorModel, type PlacedEquipment } from './buildFloor';
 
-// 장비 점은 2D 지도(FloorMapView)와 같은 색 클래스·크기를 쓴다(theme.css map-marker-*)
-const STATUS: Record<string, { className: string; label: string }> = {
-  checked_out: { className: 'map-marker-err', label: '대여 중' },
-  inactive: { className: 'map-marker-neutral', label: '비활성' },
-  available: { className: 'map-marker-ok', label: '사용 가능' },
+// 장비 구슬은 2D 지도(FloorMapView) 점과 같은 색·지름(화면 px)을 쓴다(theme.css map-marker-*)
+type Status = { className: string; label: string; color: number };
+const STATUS: Record<string, Status> = {
+  checked_out: { className: 'map-marker-err', label: '대여 중', color: 0xef4444 },
+  inactive: { className: 'map-marker-neutral', label: '비활성', color: 0x64748b },
+  available: { className: 'map-marker-ok', label: '사용 가능', color: 0x22c55e },
 };
 const statusOf = (status?: string) => STATUS[status ?? 'available'] ?? STATUS.available;
 const DOT_SIZE = 14;
 const SPOTLIGHT_DOT_SIZE = 22;
 const SPOTLIGHT_RING_SIZE = 40;
 const HIT_SIZE = 28;
+// 구슬 중심은 바닥에서 반지름의 이 배수만큼 띄우고, 바로 아래 바닥에 반지름의 이 배수만 한 그림자를 깐다
+const BALL_LIFT = 1.8;
+const SHADOW_SCALE = 1.25;
+// 그림자는 바닥에 새긴 구역 이름(0.65) 위에 깐다
+const SHADOW_LIFT = 0.2;
+
+// 구슬 아래 그림자: 가장자리로 갈수록 흐려지는 원
+function shadowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(15,46,79,0.42)');
+  gradient.addColorStop(1, 'rgba(15,46,79,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
 
 const TAG_STYLE =
   'position:absolute;transform:translate(-50%,-50%);z-index:2;border:1px solid rgba(15,46,79,.25);padding:2px 7px;font-size:11.5px;font-weight:650;line-height:16px;white-space:nowrap;box-shadow:0 1px 3px rgba(15,46,79,.16);pointer-events:none';
 
-type Overlay = { dot: HTMLButtonElement; tag: HTMLDivElement; equipment: PlacedEquipment };
+type Overlay = {
+  dot: HTMLButtonElement;
+  tag: HTMLDivElement;
+  ball: THREE.Mesh;
+  shadow: THREE.Mesh;
+  equipment: PlacedEquipment;
+};
 
 export class MapEngine {
   private readonly renderer: THREE.WebGLRenderer;
@@ -42,6 +75,18 @@ export class MapEngine {
   private readonly quality = createQualityGovernor();
   private floorGroup: THREE.Group | null = null;
   private marker: THREE.Group | null = null;
+  // 장비 구슬과 그림자. geometry·material은 모든 장비가 나눠 쓴다
+  private readonly balls = new THREE.Group();
+  private readonly ballGeometry = new THREE.SphereGeometry(1, 32, 16);
+  private readonly ballMaterials = new Map(
+    Object.values(STATUS).map((s) => [s, new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.35 })]),
+  );
+  private readonly shadowGeometry = new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2);
+  private readonly shadowMaterial = new THREE.MeshBasicMaterial({
+    map: shadowTexture(),
+    transparent: true,
+    depthWrite: false,
+  });
   private fitPoints: THREE.Vector3[] = [];
   private overlays: Overlay[] = [];
   private focusTagId: string | null = null;
@@ -87,6 +132,7 @@ export class MapEngine {
       ground.position.y = -8.1;
       ground.receiveShadow = true;
       this.scene.add(ground);
+      this.scene.add(this.balls);
 
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       Object.assign(this.controls, {
@@ -142,6 +188,7 @@ export class MapEngine {
       o.dot.remove();
       o.tag.remove();
     }
+    this.balls.clear();
     this.overlays = placed.map((e) => {
       const dot = document.createElement('button');
       dot.type = 'button';
@@ -152,14 +199,19 @@ export class MapEngine {
       const tag = document.createElement('div');
       tag.dataset.testid = `floor-map-3d-tag-${e.tag_id}`;
       this.layer.append(dot, tag);
-      const o = { dot, tag, equipment: e };
+      const ball = new THREE.Mesh(this.ballGeometry, this.ballMaterials.get(statusOf(e.assetStatus)));
+      ball.position.copy(e.position);
+      const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterial);
+      shadow.position.copy(e.position).setY(e.position.y + SHADOW_LIFT);
+      this.balls.add(ball, shadow);
+      const o = { dot, tag, ball, shadow, equipment: e };
       this.styleOverlay(o);
       return o;
     });
     this.requestRender();
   }
 
-  // 목록에서 고른 장비, 또는 지도에서 누른 장비: 점은 2D처럼 키우고 고리를 띄우며, 이름표는 남색에 상태를 붙인다
+  // 목록에서 고른 장비, 또는 지도에서 누른 장비: 구슬은 2D 점처럼 키우고 흰 테두리와 고리를 띄우며, 이름표는 남색에 상태를 붙인다
   setFocus(tagId: string | null) {
     this.focusTagId = tagId;
     for (const o of this.overlays) this.styleOverlay(o);
@@ -247,6 +299,11 @@ export class MapEngine {
     }
     this.ground.geometry.dispose();
     this.ground.material.dispose();
+    this.ballGeometry.dispose();
+    for (const m of this.ballMaterials.values()) m.dispose();
+    this.shadowGeometry.dispose();
+    this.shadowMaterial.map?.dispose();
+    this.shadowMaterial.dispose();
     this.scene.environment?.dispose();
     this.ao.dispose();
     this.composer.dispose();
@@ -269,6 +326,8 @@ export class MapEngine {
       const next = this.quality.record(now - this.lastFrameAt);
       if (next !== null) this.applyQuality(next);
     }
+    this.camera.updateMatrixWorld();
+    this.updateBalls();
     this.composer.render();
     this.updateOverlays();
     this.continuous = moving;
@@ -292,35 +351,49 @@ export class MapEngine {
     }
   }
 
+  // 구슬은 장면에 그리고, 이 단추는 구슬 위의 보이지 않는 누르는 영역이다. 고른 장비만 2D처럼 흰 테두리와 퍼지는 고리를 덧그린다
   private styleOverlay({ dot, tag, equipment: e }: Overlay) {
     const focused = e.tag_id === this.focusTagId;
     const status = statusOf(e.assetStatus);
-    const size = focused ? SPOTLIGHT_DOT_SIZE : DOT_SIZE;
     dot.style.cssText = `position:absolute;transform:translate(-50%,-50%);z-index:${focused ? 3 : 1};display:flex;align-items:center;justify-content:center;width:${HIT_SIZE}px;height:${HIT_SIZE}px;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto`;
-    const mark = document.createElement('span');
-    mark.className = `relative block rounded-full ${status.className}${focused ? ' map-marker-spotlight' : ''}`;
-    mark.style.cssText = `width:${size}px;height:${size}px`;
     if (focused) {
       const ring = document.createElement('span');
       ring.className = `pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full opacity-70 ${status.className}`;
       ring.style.cssText = `width:${SPOTLIGHT_RING_SIZE}px;height:${SPOTLIGHT_RING_SIZE}px`;
-      dot.replaceChildren(ring, mark);
-    } else dot.replaceChildren(mark);
+      const rim = document.createElement('span');
+      rim.className = 'relative block rounded-full map-marker-spotlight';
+      rim.style.cssText = `width:${SPOTLIGHT_DOT_SIZE}px;height:${SPOTLIGHT_DOT_SIZE}px`;
+      dot.replaceChildren(ring, rim);
+    } else dot.replaceChildren();
     tag.style.cssText = TAG_STYLE;
     Object.assign(tag.style, tagColors(e.assetStatus, focused));
     if (focused) tag.style.zIndex = '4';
     tag.textContent = focused ? `${e.label} · ${status.label}` : e.label;
   }
 
-  // 장비 점을 바닥 자리에 찍고, 이름표는 점 바로 위에 붙인다(겹치면 비키고 점까지 가는 선을 긋는다)
+  // 구슬과 그림자를 카메라 깊이에 맞춰 키워, 확대와 관계없이 화면에서 같은 지름으로 보이게 한다
+  private updateBalls() {
+    const h = this.host.clientHeight;
+    if (!h) return;
+    for (const o of this.overlays) {
+      const size = o.equipment.tag_id === this.focusTagId ? SPOTLIGHT_DOT_SIZE : DOT_SIZE;
+      const depth = -o.equipment.position.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
+      const r = (size / 2) * worldPerPixel(Math.max(depth, 1), this.camera.fov, h);
+      o.ball.scale.setScalar(r);
+      o.ball.position.y = o.equipment.position.y + r * BALL_LIFT;
+      o.shadow.scale.setScalar(r * SHADOW_SCALE);
+    }
+  }
+
+  // 누르는 영역과 이름표를 구슬 중심에 맞추고, 이름표는 구슬 바로 위에 붙인다(겹치면 비키고 구슬까지 가는 선을 긋는다)
   private updateOverlays() {
     const w = this.host.clientWidth;
     const h = this.host.clientHeight;
     const shown: { o: Overlay; x: number; y: number }[] = [];
     for (const o of this.overlays) {
-      const p = o.equipment.position.clone().project(this.camera);
+      const p = o.ball.position.clone().project(this.camera);
       const [x, y] = [((p.x + 1) / 2) * w, ((1 - p.y) / 2) * h];
-      // 확대해 화면 밖으로 나간 장비는 점도 숨긴다
+      // 확대해 화면 밖으로 나간 장비는 누르는 영역도 숨긴다
       const onScreen = p.z < 1 && x >= 0 && x <= w && y >= 0 && y <= h;
       o.dot.style.display = onScreen ? 'flex' : 'none';
       o.dot.style.left = `${x}px`;

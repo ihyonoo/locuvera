@@ -1,4 +1,4 @@
-// 3D 지도 실행 중 판단(three.js 없이 계산만): 장비 이름표 비킴·색, 장비 층 갱신 여부, 품질 자동 조절.
+// 3D 지도 실행 중 판단(three.js 없이 계산만): 장비 이름표 비킴·색, 구슬 크기, 장비 층 갱신 여부, 품질 자동 조절.
 export type Rect = { left: number; top: number; right: number; bottom: number };
 
 type TagDot = { id: string; x: number; y: number; w: number; h: number };
@@ -98,6 +98,11 @@ const STATUS_TEXT: Record<string, string> = { available: '#15803d', checked_out:
 export function tagColors(assetStatus: string | undefined, focused: boolean): { background: string; color: string } {
   if (focused) return { background: NAVY, color: '#fff' };
   return { background: '#fff', color: STATUS_TEXT[assetStatus ?? 'available'] ?? NAVY };
+}
+
+// 원근 카메라에서 화면 1px이 그 깊이(카메라 앞 방향 거리)의 장면 단위로 얼마인가. 구슬을 확대와 관계없이 같은 화면 크기로 그린다
+export function worldPerPixel(depth: number, fovDeg: number, viewportHeight: number): number {
+  return (2 * depth * Math.tan((fovDeg * Math.PI) / 360)) / viewportHeight;
 }
 
 type LayerDot = { tag_id: string; reader_id: string; assetStatus?: string };

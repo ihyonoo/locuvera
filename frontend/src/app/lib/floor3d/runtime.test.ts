@@ -4,6 +4,7 @@ import {
   equipmentLayerKey,
   placeTagLabels,
   tagColors,
+  worldPerPixel,
   type Rect,
   type TagSpot,
 } from './runtime';
@@ -159,5 +160,16 @@ describe('tagColors', () => {
   it('keeps the focused tag white on navy whatever the status', () => {
     expect(tagColors('checked_out', true)).toEqual({ background: '#0f2e4f', color: '#fff' });
     expect(tagColors('available', true)).toEqual({ background: '#0f2e4f', color: '#fff' });
+  });
+});
+
+describe('worldPerPixel', () => {
+  it('converts one screen pixel into scene units at the given depth', () => {
+    // 시야각 90°면 깊이 100에서 화면 높이가 장면 200이다. 화면 200px이면 1px = 1
+    expect(worldPerPixel(100, 90, 200)).toBeCloseTo(1);
+  });
+
+  it('grows with depth so a marker keeps its screen size when zooming out', () => {
+    expect(worldPerPixel(300, 28, 400)).toBeCloseTo(3 * worldPerPixel(100, 28, 400));
   });
 });

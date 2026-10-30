@@ -701,7 +701,7 @@ function floorText(lines: string[], { angle, size }: { angle: number; size: numb
 type EquipmentInput = { tag_id: string; reader_id: string; label: string; assetStatus?: string };
 export type PlacedEquipment = EquipmentInput & { position: THREE.Vector3 };
 
-// 구역 안 장비 자리(바닥 높이). 3D 보기는 장비를 2D 지도처럼 점과 이름표로만 그린다
+// 구역 안 장비 자리(바닥 높이). 3D 보기는 장비를 상태 색 구슬과 이름표로만 그린다
 export function placeEquipmentOnFloor(
   plan: FloorPlan,
   zones: ZonePx[],
