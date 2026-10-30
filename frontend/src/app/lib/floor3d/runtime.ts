@@ -12,12 +12,11 @@ const BELOW_PENALTY = 4; // 점 아래는 위보다 이만큼 덜 선호
 const overlaps = (a: Rect, b: Rect) =>
   a.right > b.left - TAG_GAP && a.left < b.right + TAG_GAP && a.bottom > b.top - TAG_GAP && a.top < b.bottom + TAG_GAP;
 
-/**
- * 장비 점 바로 위에 이름표를 놓는다. dots의 x, y는 점 중심, w, h는 이름표 크기.
- * 다른 이름표나 점을 덮거나 화면 밖이면 비킨다. 후보는 점 바로 위·바로 아래를 기준으로 위아래 한 줄·좌우 반 칸씩 비킨 격자이고,
- * 두 기준 중 가까운 쪽까지의 거리 순으로 본다(아래는 조금 덜 선호). 비킨 이름표로 가는 선이 다른 이름표나 점을 지나지 않는 자리를 먼저 찾고,
- * 없으면 겹치지만 않는 자리, 그것도 없으면 기본 자리. 목록 앞의 점이 먼저 자리를 잡는다(고른 장비를 맨 앞에 둔다).
- */
+// 장비 점 바로 위에 이름표를 놓는다. dots의 x, y는 점 중심, w, h는 이름표 크기
+// - 다른 이름표나 점을 덮거나 화면 밖이면 비킨다
+// - 후보: 점 바로 위·바로 아래 기준으로 위아래 한 줄·좌우 반 칸씩 비킨 격자. 가까운 기준까지의 거리 순(아래는 조금 덜 선호)
+// - 비킨 선이 다른 이름표·점을 지나지 않는 자리 → 겹치지만 않는 자리 → 기본 자리 순으로 고른다
+// - 목록 앞의 점이 먼저 자리를 잡는다(고른 장비를 맨 앞에 둔다)
 export function placeTagLabels(dots: TagDot[], view: Rect): Map<string, TagSpot> {
   const out = new Map<string, TagSpot>();
   const taken: Rect[] = dots.map((d) => ({

@@ -5,8 +5,7 @@ import type { FloorNumber } from '../floorMaps';
 import type { ZonePoint } from '../floorZoneBounds';
 import type { Px } from './layout';
 
-// fit: 좁은 방의 글자 크기 상한(px)
-export type ZoneLabel = { at: Px; lines: string[]; fit?: number };
+export type ZoneLabel = { at: Px; lines: string[] };
 export type Room = {
   poly: Px[];
   name?: string;
@@ -336,10 +335,10 @@ export const FLOOR_PLANS: Record<FloorNumber, FloorPlan> = {
       [441, 93],
     ],
     zoneLabels: {
-      M201: { at: [212, 398], lines: ['채혈실'], fit: 13 },
-      M202: { at: [262, 326], lines: ['호흡기', '검사실'], fit: 12.5 },
-      M203: { at: [334, 275], lines: ['외래심장', '검사실'], fit: 12.5 },
-      M204: { at: [418, 180], lines: ['암치료센터', '종양혈액내과'], fit: 12 },
+      M201: { at: [212, 398], lines: ['채혈실'] },
+      M202: { at: [262, 326], lines: ['호흡기', '검사실'] },
+      M203: { at: [334, 275], lines: ['외래심장', '검사실'] },
+      M204: { at: [418, 180], lines: ['암치료센터', '종양혈액내과'] },
       M205: { at: [643, 72], lines: ['주사센터'] },
       M206: { at: [610, 151], lines: ['호흡기센터'] },
       M207: { at: [610, 226], lines: ['심장혈관센터'] },
@@ -606,9 +605,9 @@ export const FLOOR_PLANS: Record<FloorNumber, FloorPlan> = {
     ],
     zoneLabels: {
       M301: { at: [205, 392], lines: ['가정의학센터'] },
-      M302: { at: [266, 322], lines: ['당뇨내분비센터'], fit: 12 },
+      M302: { at: [266, 322], lines: ['당뇨내분비센터'] },
       M303: { at: [364, 240], lines: ['유방갑상선', '센터'] },
-      M304: { at: [418, 162], lines: ['감염병', '센터'], fit: 11.5 },
+      M304: { at: [418, 162], lines: ['감염병', '센터'] },
       M305: { at: [612, 105], lines: ['이비인후·두경부센터'] },
       M306: { at: [612, 172], lines: ['치아건강센터'] },
       M307: { at: [655, 305], lines: ['눈건강센터'] },
@@ -870,13 +869,13 @@ export const FLOOR_PLANS: Record<FloorNumber, FloorPlan> = {
     ],
     zoneLabels: {
       M401: { at: [280, 372], lines: ['진단검사의학센터'] },
-      M402: { at: [404, 194], lines: ['소아', '재활센터'], fit: 12 },
+      M402: { at: [404, 194], lines: ['소아', '재활센터'] },
       M403: { at: [570, 160], lines: ['소아전문센터'] },
       M404: { at: [760, 122], lines: ['지역모자의료센터'] },
       M405: { at: [662, 344], lines: ['고위험분만센터'] },
       M406: { at: [611, 478], lines: ['여성건강센터'] },
       M407: { at: [642, 603], lines: ['병리진단센터'] },
-      M408: { at: [527, 652], lines: ['장기이식', '센터'], fit: 11 },
+      M408: { at: [527, 652], lines: ['장기이식', '센터'] },
       M409: { at: [590, 704], lines: ['신장센터'] },
       M410: { at: [640, 805], lines: ['투석센터'] },
     },

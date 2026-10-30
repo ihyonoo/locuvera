@@ -1,6 +1,6 @@
 // 3D 층 지도의 배치 규칙(three.js 없이 계산만). 좌표는 원본 안내도 이미지 px.
 export type Px = [number, number];
-export type ZoneLabelSpot = { at: Px; lines: string[] };
+type ZoneLabelSpot = { at: Px; lines: string[] };
 
 export type ZoneKind = 'outpatient' | 'exam' | 'acute' | 'family' | 'surgery';
 
@@ -39,10 +39,9 @@ function fitTextSize(poly: Px[], angle: number, lines: string[]) {
   return Math.min(TEXT_MAX, width, height);
 }
 
-/**
- * 구역 바닥에 새길 이름의 방향(평면 좌표 기준선 각도)과 글자 크기(px).
- * 동서로 읽기 좋게 들어가면 그대로, 아니면 긴 벽을 따라 돌린다. 글자 머리는 남서쪽 카메라 반대편(북동)을 향한다.
- */
+// 구역 바닥에 새길 이름의 방향(평면 좌표 기준선 각도)과 글자 크기(px)
+// - 동서로 읽기 좋게 들어가면 그대로, 아니면 긴 벽을 따라 돌린다
+// - 글자 머리는 남서쪽 카메라 반대편(북동)을 향한다
 export function floorTextLayout(poly: Px[], lines: string[]): { angle: number; size: number } {
   const flat = fitTextSize(poly, 0, lines);
   if (flat >= TEXT_FLAT_MIN) return { angle: 0, size: flat };
@@ -107,7 +106,7 @@ export function edgeDistance([px, py]: Px, poly: Px[]): number {
   return best;
 }
 
-export function centroid(poly: Px[]): Px {
+function centroid(poly: Px[]): Px {
   let area = 0;
   let cx = 0;
   let cy = 0;
@@ -176,10 +175,9 @@ function fillFarthest(cands: Candidate[], picked: Px[], count: number, poly: Px[
   return out;
 }
 
-/**
- * 구역 장비의 자리와 그 구역 배율. tag_id 정렬 순으로 자리를 배정하므로 같은 장비 집합은 늘 같은 자리다.
- * 다 들어가지 않으면 배율을 0.45까지 줄이고, 그래도 안 되면 간격 없이 전부 세운다.
- */
+// 구역 장비의 자리와 그 구역 배율
+// - tag_id 정렬 순으로 배정하므로 같은 장비 집합은 늘 같은 자리다
+// - 다 들어가지 않으면 배율을 0.45까지 줄이고, 그래도 안 되면 간격 없이 전부 세운다
 export function placeEquipment(
   polygon: Px[],
   tagIds: string[],

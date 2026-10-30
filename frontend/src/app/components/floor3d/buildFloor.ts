@@ -13,7 +13,7 @@ import {
   type ZoneKind,
 } from '../../lib/floor3d/layout';
 
-export const CENTER: Px = [465, 488];
+const CENTER: Px = [465, 488];
 const WALL = 24;
 const OUTER_T = 6;
 const PART_T = 2.4;
@@ -698,7 +698,7 @@ function floorText(lines: string[], { angle, size }: { angle: number; size: numb
 }
 
 // ── 장비 자리 ─────────────────────────────────────────
-export type EquipmentInput = { tag_id: string; reader_id: string; label: string; assetStatus?: string };
+type EquipmentInput = { tag_id: string; reader_id: string; label: string; assetStatus?: string };
 export type PlacedEquipment = EquipmentInput & { position: THREE.Vector3 };
 
 // 구역 안 장비 자리(바닥 높이). 3D 보기는 장비를 2D 지도처럼 점과 이름표로만 그린다
