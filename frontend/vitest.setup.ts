@@ -52,3 +52,24 @@ Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true
 // 이걸 켜지 않으면 한 파일 안에 여러 render()가 있을 때 이전 테스트의 DOM이 남아
 // 다음 테스트의 getByText 등이 중복 매치로 실패한다.
 afterEach(() => cleanup());
+
+// Node 25의 전역 localStorage(--localstorage-file 없이는 메서드가 없다)가 jsdom 것을 가린다.
+// 브라우저에는 없는 문제라 테스트에서만 메모리 구현으로 바꾼다.
+if (typeof globalThis.localStorage?.clear !== 'function') {
+  const store = new Map<string, string>();
+  const memoryStorage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key) => store.get(key) ?? null,
+    key: (index) => [...store.keys()][index] ?? null,
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    setItem: (key, value) => {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: memoryStorage, configurable: true });
+}

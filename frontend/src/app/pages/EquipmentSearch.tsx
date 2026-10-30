@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -19,7 +19,15 @@ import FloorMapView, {
   type FloorMapEquipmentDot,
   type FloorMapHighlight,
 } from '../components/FloorMapView';
+import Map3DBoundary from '../components/floor3d/Map3DBoundary';
 import { FLOOR_MAPS, type FloorNumber } from '../lib/floorMaps';
+import {
+  isWebGLAvailable,
+  MAP_3D_ASPECT,
+  readMapDimension,
+  writeMapDimension,
+  type MapDimension,
+} from '../lib/mapDimension';
 import { getAmenityZonesForFloor } from '../lib/floorZones';
 import { ZONE_BOUNDS } from '../lib/floorZoneBounds';
 import { polygonCentroid } from '../lib/floorMapLayout';
@@ -86,6 +94,18 @@ type EquipmentViewItem = {
   currentHolderName: string | null;
 };
 
+// three.js는 3D 보기를 쓸 때만 내려받는다
+const FloorMap3D = lazy(() => import('../components/floor3d/FloorMap3D'));
+
+// 사생활 보호 모드 등에서는 localStorage 접근 자체가 예외를 던진다
+function browserStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function getOnlineDotClass(isOnline: boolean) {
   return isOnline ? 'h-2.5 w-2.5 rounded-full dot-ok' : 'h-2.5 w-2.5 rounded-full dot-warn';
 }
@@ -128,6 +148,18 @@ export default function EquipmentSearch() {
   const [availableOnly, setAvailableOnly] = useState(false);
   const [hideSimulated, setHideSimulated] = useState(false);
   const [highlightedZone, setHighlightedZone] = useState<FloorMapHighlight | null>(null);
+  // 층 지도 2D/3D. WebGL이 없으면 항상 2D, 3D가 실패하면 이 화면에서만 2D로 바꾼다(선택은 유지).
+  const [webglAvailable] = useState(isWebGLAvailable);
+  const [mapDimension, setMapDimension] = useState<MapDimension>(() =>
+    readMapDimension(browserStorage(), webglAvailable),
+  );
+  const [map3dFailed, setMap3dFailed] = useState(false);
+  const chooseMapDimension = (value: MapDimension) => {
+    setMapDimension(value);
+    setMap3dFailed(false);
+    writeMapDimension(browserStorage(), value);
+  };
+  const showing3d = mapDimension === '3d' && webglAvailable && !map3dFailed;
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
@@ -287,7 +319,12 @@ export default function EquipmentSearch() {
     const pinReaderIds = new Set(floorPins.map((p) => p.reader_id));
     return searchAndTypeFilteredEquipment
       .filter((eq) => pinReaderIds.has(eq.readerId))
-      .map((eq) => ({ tag_id: eq.id, reader_id: eq.readerId, label: eq.name, assetStatus: eq.assetStatus }));
+      .map((eq) => ({
+        tag_id: eq.id,
+        reader_id: eq.readerId,
+        label: eq.name,
+        assetStatus: eq.assetStatus,
+      }));
   }, [floorPins, searchAndTypeFilteredEquipment]);
 
   // "층별 구역 안내": 선택된 층의 리더 구역(장비 추적 가능)과 편의시설 구역(floorZones.ts,
@@ -706,22 +743,79 @@ export default function EquipmentSearch() {
 
                 {viewMode === 'map' ? (
                   <div className="space-y-3">
-                    {floorTabs}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      {floorTabs}
+                      <div data-testid="map-dimension-toggle" className="flex border border-border">
+                        {(['2d', '3d'] as const).map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={value === '3d' && !webglAvailable}
+                            title={
+                              value === '3d' && !webglAvailable ? '이 기기에서는 3D 보기를 쓸 수 없습니다' : undefined
+                            }
+                            aria-pressed={(value === '3d') === showing3d}
+                            className={`h-8 px-3 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
+                              (value === '3d') === showing3d
+                                ? 'bg-foreground font-semibold text-background'
+                                : 'text-muted-foreground'
+                            }`}
+                            onClick={() => chooseMapDimension(value)}
+                          >
+                            {value === '2d' ? '2D 도면' : '3D'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     {floorPins.length === 0 ? (
                       <div className="empty-state">이 층에는 아직 배치된 구역이 없습니다.</div>
                     ) : (
                       <>
-                        <FloorMapView
-                          floor={selectedFloor}
-                          pins={floorPins}
-                          equipment={floorEquipmentDots}
-                          // 지도 마커 클릭은 그 점의 이름표만 여는 동작 — 목록에서 건 강조는 함께 풀어준다.
-                          onEquipmentClick={() => setSelectedEquipment(null)}
-                          zoneBounds={ZONE_BOUNDS}
-                          highlightedZone={highlightedZone}
-                          spotlightTagId={selectedEquipment}
-                          spotlightReaderIds={realReaderIdsOnFloor}
-                        />
+                        {showing3d ? (
+                          <Map3DBoundary onError={() => setMap3dFailed(true)}>
+                            <Suspense
+                              fallback={
+                                <div
+                                  className="flex w-full items-center justify-center rounded-lg border border-border bg-muted text-sm text-muted-foreground"
+                                  style={{ aspectRatio: MAP_3D_ASPECT }}
+                                >
+                                  3D 지도를 불러오는 중…
+                                </div>
+                              }
+                            >
+                              <FloorMap3D
+                                floor={selectedFloor}
+                                pins={floorPins}
+                                equipment={floorEquipmentDots}
+                                onEquipmentClick={() => setSelectedEquipment(null)}
+                                zoneBounds={ZONE_BOUNDS}
+                                highlightedZone={highlightedZone}
+                                spotlightTagId={selectedEquipment}
+                                spotlightReaderIds={realReaderIdsOnFloor}
+                                onUnavailable={() => setMap3dFailed(true)}
+                              />
+                            </Suspense>
+                          </Map3DBoundary>
+                        ) : (
+                          <>
+                            {map3dFailed && mapDimension === '3d' ? (
+                              <div role="status" className="text-sm text-muted-foreground">
+                                3D 보기를 불러오지 못해 2D로 표시합니다.
+                              </div>
+                            ) : null}
+                            <FloorMapView
+                              floor={selectedFloor}
+                              pins={floorPins}
+                              equipment={floorEquipmentDots}
+                              // 지도 마커 클릭은 그 점의 이름표만 여는 동작 — 목록에서 건 강조는 함께 풀어준다.
+                              onEquipmentClick={() => setSelectedEquipment(null)}
+                              zoneBounds={ZONE_BOUNDS}
+                              highlightedZone={highlightedZone}
+                              spotlightTagId={selectedEquipment}
+                              spotlightReaderIds={realReaderIdsOnFloor}
+                            />
+                          </>
+                        )}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1.5">
                             <span className="h-2.5 w-2.5 rounded-full map-marker-ok" />
