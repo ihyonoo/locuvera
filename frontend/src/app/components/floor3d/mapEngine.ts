@@ -6,7 +6,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { createQualityGovernor, placeTagLabels, type QualityLevel } from '../../lib/floor3d/runtime';
+import { createQualityGovernor, placeTagLabels, tagColors, type QualityLevel } from '../../lib/floor3d/runtime';
 import { disposeGeometries, type buildFloorModel, type PlacedEquipment } from './buildFloor';
 
 // 장비 점은 2D 지도(FloorMapView)와 같은 색 클래스·크기를 쓴다(theme.css map-marker-*)
@@ -41,7 +41,6 @@ export class MapEngine {
   private readonly onContextLost: (event: Event) => void;
   private readonly quality = createQualityGovernor();
   private floorGroup: THREE.Group | null = null;
-  private floorNames: THREE.Group | null = null;
   private marker: THREE.Group | null = null;
   private fitPoints: THREE.Vector3[] = [];
   private overlays: Overlay[] = [];
@@ -133,8 +132,6 @@ export class MapEngine {
     }
     this.floorGroup = floorModel.group;
     this.scene.add(this.floorGroup);
-    this.floorNames = floorModel.names;
-    this.floorNames.visible = this.showLabels;
     this.fitPoints = floorModel.fitPoints;
     if (fitView) this.resetView();
     else this.requestRender();
@@ -196,10 +193,9 @@ export class MapEngine {
     this.requestRender();
   }
 
-  // 장비 이름표와 바닥에 새긴 구역 이름을 함께 켜고 끈다
+  // 장비 이름표만 켜고 끈다. 바닥에 새긴 구역 이름은 늘 보인다
   setLabelsVisible(visible: boolean) {
     this.showLabels = visible;
-    if (this.floorNames) this.floorNames.visible = visible;
     this.requestRender();
   }
 
@@ -311,8 +307,7 @@ export class MapEngine {
       dot.replaceChildren(ring, mark);
     } else dot.replaceChildren(mark);
     tag.style.cssText = TAG_STYLE;
-    tag.style.background = focused ? '#0f2e4f' : '#fff';
-    tag.style.color = focused ? '#fff' : '#0f2e4f';
+    Object.assign(tag.style, tagColors(e.assetStatus, focused));
     if (focused) tag.style.zIndex = '4';
     tag.textContent = focused ? `${e.label} · ${status.label}` : e.label;
   }

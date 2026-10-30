@@ -637,7 +637,7 @@ export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], dimmedReaderId
   b.root.add(names);
 
   const fitPoints = plan.outline.flatMap(([x, y]) => [b.world(x, y, -SLAB), b.world(x, y, WALL + 1)]);
-  return { group: b.root, names, fitPoints };
+  return { group: b.root, fitPoints };
 }
 
 const TEXT_INK = '#0f2e4f';

@@ -1,4 +1,4 @@
-// 3D 지도 실행 중 판단(three.js 없이 계산만): 장비 이름표 비킴, 장비 층 갱신 여부, 품질 자동 조절.
+// 3D 지도 실행 중 판단(three.js 없이 계산만): 장비 이름표 비킴·색, 장비 층 갱신 여부, 품질 자동 조절.
 export type Rect = { left: number; top: number; right: number; bottom: number };
 
 type TagDot = { id: string; x: number; y: number; w: number; h: number };
@@ -88,6 +88,16 @@ function segmentThrough([ax, ay]: [number, number], [bx, by]: [number, number], 
     if (t0 >= t1) return false;
   }
   return true;
+}
+
+const NAVY = '#0f2e4f';
+// 상태별 글씨 색: 점(#22c55e·#ef4444)과 같은 계열에서 흰 바탕 대비 4.5:1을 넘는 색. 비활성은 남색
+const STATUS_TEXT: Record<string, string> = { available: '#15803d', checked_out: '#dc2626' };
+
+// 이름표 바탕·글씨 색. 고른 장비는 남색 바탕, 나머지는 흰 바탕에 상태 색 글씨. 상태가 없으면 점처럼 사용 가능으로 본다
+export function tagColors(assetStatus: string | undefined, focused: boolean): { background: string; color: string } {
+  if (focused) return { background: NAVY, color: '#fff' };
+  return { background: '#fff', color: STATUS_TEXT[assetStatus ?? 'available'] ?? NAVY };
 }
 
 type LayerDot = { tag_id: string; reader_id: string; assetStatus?: string };

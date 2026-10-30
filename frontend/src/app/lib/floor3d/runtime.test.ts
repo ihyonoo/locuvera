@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createQualityGovernor, equipmentLayerKey, placeTagLabels, type Rect, type TagSpot } from './runtime';
+import {
+  createQualityGovernor,
+  equipmentLayerKey,
+  placeTagLabels,
+  tagColors,
+  type Rect,
+  type TagSpot,
+} from './runtime';
 
 describe('placeTagLabels', () => {
   const view: Rect = { left: 0, top: 0, right: 800, bottom: 600 };
@@ -131,5 +138,26 @@ describe('createQualityGovernor', () => {
     expect(feed(gov, 50, 600)).toEqual([]);
     expect(feed(gov, 5, 600)).toEqual([]);
     expect(gov.level).toBe(3);
+  });
+});
+
+describe('tagColors', () => {
+  it('writes the name of checked-out equipment in red on the white tag', () => {
+    expect(tagColors('checked_out', false)).toEqual({ background: '#fff', color: '#dc2626' });
+  });
+
+  it('writes the name of available equipment in green on the white tag', () => {
+    // 상태가 없으면 점처럼 사용 가능으로 본다
+    for (const status of ['available', undefined])
+      expect(tagColors(status, false), String(status)).toEqual({ background: '#fff', color: '#15803d' });
+  });
+
+  it('keeps the name of inactive equipment navy on the white tag', () => {
+    expect(tagColors('inactive', false)).toEqual({ background: '#fff', color: '#0f2e4f' });
+  });
+
+  it('keeps the focused tag white on navy whatever the status', () => {
+    expect(tagColors('checked_out', true)).toEqual({ background: '#0f2e4f', color: '#fff' });
+    expect(tagColors('available', true)).toEqual({ background: '#0f2e4f', color: '#fff' });
   });
 });
