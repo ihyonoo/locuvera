@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { distanceToFloorText, floorTextLayout, placeEquipment, zoneKind, type Px } from './layout';
+import { ZONE_BOUNDS } from '../floorZoneBounds';
+import { FLOOR_PLANS, zonePolygonsPx } from './floorPlans';
+import { distanceToFloorText, edgeDistance, floorTextLayout, placeEquipment, zoneKind, type Px } from './layout';
 
 const inside = ([x, y]: Px, poly: Px[]) => {
   let hit = false;
@@ -61,6 +63,59 @@ describe('placeEquipment', () => {
     const { spots } = placeEquipment(room, ['t1', 't2', 't3', 't4'], label);
     for (const p of spots.values())
       expect(distanceToFloorText(p, label.at, label.lines, text)).toBeGreaterThanOrEqual(26);
+  });
+
+  it('keeps equipment off the zone edge even when the floor name fills a narrow zone', () => {
+    // 이름이 가운데를 채운 띠 구역: 이름을 피하려고 양 끝 모서리로 밀지 않는다
+    const strip: Px[] = [
+      [0, 0],
+      [300, 0],
+      [300, 100],
+      [0, 100],
+    ];
+    const label = { at: [150, 50] as Px, lines: ['소아전문', '응급의료센터'] };
+    const { spots } = placeEquipment(strip, ['a', 'b', 'c', 'd', 'e'], label);
+    expect(spots.size).toBe(5);
+    for (const p of spots.values()) expect(edgeDistance(p, strip)).toBeGreaterThanOrEqual(34);
+  });
+
+  it('keeps dots just clear of the floor name before putting them on it', () => {
+    // 이름에서 26px 띄울 자리는 없지만, 점(반지름 7)이 글자에 닿지 않을 자리는 양 끝에 있다
+    const room: Px[] = [
+      [0, 0],
+      [230, 0],
+      [230, 120],
+      [0, 120],
+    ];
+    const label = { at: [115, 60] as Px, lines: ['가나다라마'] };
+    const text = floorTextLayout(room, label.lines);
+    const { spots } = placeEquipment(room, ['a', 'b'], label);
+    for (const p of spots.values()) {
+      expect(edgeDistance(p, room)).toBeGreaterThanOrEqual(34);
+      expect(distanceToFloorText(p, label.at, label.lines, text)).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it('keeps every dot inward on the real floor plans', () => {
+    // 경계에서 34px, 그만큼 두껍지 않은 구역은 구역 깊이(가장 안쪽 점의 경계 거리)의 60% 이상
+    for (const floor of [1, 2, 3, 4, 5] as const) {
+      const plan = FLOOR_PLANS[floor];
+      for (const { readerId, poly } of zonePolygonsPx(plan, ZONE_BOUNDS)) {
+        const xs = poly.map((p) => p[0]);
+        const ys = poly.map((p) => p[1]);
+        let depth = 0;
+        for (let x = Math.min(...xs); x <= Math.max(...xs); x += 2)
+          for (let y = Math.min(...ys); y <= Math.max(...ys); y += 2)
+            if (inside([x, y], poly)) depth = Math.max(depth, edgeDistance([x, y], poly));
+        const minEdge = Math.min(34, depth * 0.6);
+        for (let n = 1; n <= 8; n++) {
+          const ids = Array.from({ length: n }, (_, i) => `t${i}`);
+          const { spots } = placeEquipment(poly, ids, plan.zoneLabels[readerId]);
+          for (const p of spots.values())
+            expect(edgeDistance(p, poly), `${readerId} ${n}대`).toBeGreaterThanOrEqual(minEdge);
+        }
+      }
+    }
   });
 
   it('shrinks equipment in a crowded zone so all of it fits', () => {

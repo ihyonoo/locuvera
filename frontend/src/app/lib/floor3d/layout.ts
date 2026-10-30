@@ -76,11 +76,13 @@ export function distanceToFloorText([px, py]: Px, at: Px, lines: string[], layou
 
 // ── 장비 자리 ─────────────────────────────────────────
 const EDGE_MARGIN = 34;
+// 34px만큼 두껍지 않은 구역은 가장 안쪽 자리의 경계 거리에 이 비율을 곱한 만큼 띄운다
+const DEPTH_MARGIN = 0.75;
 const SPACING = 82;
 const SCALES = [1, 0.85, 0.72, 0.61, 0.52, 0.45];
 const GRID = 5;
-// 바닥에 새긴 구역 이름에서 장비를 이만큼 띄운다
-const TEXT_KEEP_OUT = 26;
+// 바닥에 새긴 구역 이름에서 장비를 이만큼 띄운다. 자리가 모자라면 점이 글자에 닿지 않을 만큼(점 반지름 7 + 3)으로 줄인다
+const TEXT_KEEP_OUT = [26, 10];
 
 export function contains([x, y]: Px, poly: Px[]): boolean {
   let hit = false;
@@ -121,12 +123,12 @@ function centroid(poly: Px[]): Px {
   return area ? [cx / (3 * area), cy / (3 * area)] : poly[0];
 }
 
-type Candidate = { p: Px; score: number };
+type Candidate = { p: Px; score: number; edge: number; text: number };
 
 type KeepOut = { label: ZoneLabelSpot; text: { angle: number; size: number } } | null;
 
-// 구역 안 격자점을, 기준점(이름 근처 또는 중심)에 가깝고 벽에서 먼 순으로 정렬한다. 새긴 이름 위는 뺀다
-function candidates(poly: Px[], margin: number, keepOut: KeepOut): Candidate[] {
+// 구역 안 격자점과 경계·새긴 이름까지의 거리. 기준점(이름 근처 또는 중심)에 가깝고 벽에서 먼 순으로 정렬한다
+function candidates(poly: Px[], keepOut: KeepOut): Candidate[] {
   const label = keepOut?.label;
   const xs = poly.map((p) => p[0]);
   const ys = poly.map((p) => p[1]);
@@ -137,11 +139,9 @@ function candidates(poly: Px[], margin: number, keepOut: KeepOut): Candidate[] {
       const p: Px = [x, y];
       if (!contains(p, poly)) continue;
       const edge = edgeDistance(p, poly);
-      if (edge < margin) continue;
-      if (keepOut && distanceToFloorText(p, keepOut.label.at, keepOut.label.lines, keepOut.text) < TEXT_KEEP_OUT)
-        continue;
+      const text = keepOut ? distanceToFloorText(p, keepOut.label.at, keepOut.label.lines, keepOut.text) : Infinity;
       const score = Math.hypot(x - anchor[0], y - anchor[1]) - edge * 0.6;
-      out.push({ p, score });
+      out.push({ p, score, edge, text });
     }
   }
   return out.sort((a, b) => a.score - b.score);
@@ -177,7 +177,9 @@ function fillFarthest(cands: Candidate[], picked: Px[], count: number, poly: Px[
 
 // 구역 장비의 자리와 그 구역 배율
 // - tag_id 정렬 순으로 배정하므로 같은 장비 집합은 늘 같은 자리다
-// - 다 들어가지 않으면 배율을 0.45까지 줄이고, 그래도 안 되면 간격 없이 전부 세운다
+// - 경계에서는 늘 34px(얇은 구역은 깊이의 75%) 띄운다. 경계에 붙은 점은 어느 구역인지 헷갈린다
+// - 새긴 이름을 피해 다 들어가지 않으면 간격을 0.45배까지 줄이고, 그래도 안 되면 이름 위에도 세운다
+// - 그래도 안 되면 간격 없이 전부 세운다
 export function placeEquipment(
   polygon: Px[],
   tagIds: string[],
@@ -189,14 +191,16 @@ export function placeEquipment(
     scale,
   });
   const keepOut: KeepOut = label ? { label, text: floorTextLayout(polygon, label.lines) } : null;
-  let last: { cands: Candidate[]; picked: Px[] } = { cands: [], picked: [] };
-  for (const scale of SCALES) {
-    const cands = candidates(polygon, EDGE_MARGIN * scale, keepOut);
-    const picked = pickSpaced(cands, ids.length, SPACING * scale);
-    if (picked.length === ids.length) return assign(picked, scale);
-    // 너무 좁아 이름을 피할 자리가 없으면 마지막에만 그 제한을 푼다(전부 세우기가 우선)
-    const fallback = cands.length ? cands : candidates(polygon, 0, keepOut);
-    last = { cands: fallback.length ? fallback : candidates(polygon, 0, null), picked };
+  const cands = candidates(polygon, keepOut);
+  const depth = Math.max(0, ...cands.map((c) => c.edge));
+  const inward = cands.filter((c) => c.edge >= Math.min(EDGE_MARGIN, depth * DEPTH_MARGIN));
+  const offName = TEXT_KEEP_OUT.map((keep) => inward.filter((c) => c.text >= keep));
+  let picked: Px[] = [];
+  for (const pool of [...offName, inward]) {
+    for (const scale of SCALES) {
+      picked = pickSpaced(pool, ids.length, SPACING * scale);
+      if (picked.length === ids.length) return assign(picked, scale);
+    }
   }
-  return assign(fillFarthest(last.cands, last.picked, ids.length, polygon), SCALES[SCALES.length - 1]);
+  return assign(fillFarthest(inward, picked, ids.length, polygon), SCALES[SCALES.length - 1]);
 }
