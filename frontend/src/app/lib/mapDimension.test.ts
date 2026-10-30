@@ -1,60 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  DEFAULT_MAP_DIMENSION,
-  MAP_DIMENSION_STORAGE_KEY,
-  isWebGLAvailable,
-  readMapDimension,
-  writeMapDimension,
-} from './mapDimension';
+import { DEFAULT_MAP_DIMENSION, isWebGLAvailable } from './mapDimension';
 
-const storageWith = (value: string | null) => ({ getItem: () => value });
-
-describe('readMapDimension', () => {
+describe('DEFAULT_MAP_DIMENSION', () => {
   it('opens in 3d by default', () => {
     expect(DEFAULT_MAP_DIMENSION).toBe('3d');
-    expect(readMapDimension(storageWith(null), true)).toBe('3d');
-  });
-
-  it('follows the dimension the user picked last time', () => {
-    expect(readMapDimension(storageWith('2d'), true)).toBe('2d');
-    expect(readMapDimension(storageWith('3d'), true)).toBe('3d');
-  });
-
-  it('falls back to the default for an unknown stored value', () => {
-    expect(readMapDimension(storageWith('flat'), true)).toBe(DEFAULT_MAP_DIMENSION);
-  });
-
-  it('falls back to the default when storage throws or is missing', () => {
-    const broken = {
-      getItem: () => {
-        throw new Error('blocked');
-      },
-    };
-    expect(readMapDimension(broken, true)).toBe(DEFAULT_MAP_DIMENSION);
-    expect(readMapDimension(null, true)).toBe(DEFAULT_MAP_DIMENSION);
-  });
-
-  it('opens 2d without WebGL even if 3d was stored', () => {
-    expect(readMapDimension(storageWith('3d'), false)).toBe('2d');
-    expect(readMapDimension(storageWith(null), false)).toBe('2d');
-  });
-});
-
-describe('writeMapDimension', () => {
-  it('remembers the choice under its storage key', () => {
-    const setItem = vi.fn();
-    writeMapDimension({ setItem }, '2d');
-    expect(setItem).toHaveBeenCalledWith(MAP_DIMENSION_STORAGE_KEY, '2d');
-  });
-
-  it('ignores storage that throws or is missing', () => {
-    const broken = {
-      setItem: () => {
-        throw new Error('quota');
-      },
-    };
-    expect(() => writeMapDimension(broken, '3d')).not.toThrow();
-    expect(() => writeMapDimension(null, '3d')).not.toThrow();
   });
 });
 

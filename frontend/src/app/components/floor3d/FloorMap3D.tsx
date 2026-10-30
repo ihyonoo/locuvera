@@ -126,13 +126,6 @@ export default function FloorMap3D({
           <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />
           이름표
         </label>
-        <button
-          type="button"
-          className="h-8 border border-border bg-card px-2.5 text-xs text-muted-foreground"
-          onClick={() => engineRef.current?.resetView()}
-        >
-          시점 초기화
-        </button>
       </div>
     </div>
   );

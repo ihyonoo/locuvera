@@ -102,22 +102,26 @@ describe('EquipmentSearch 3d floor map', () => {
     expect(screen.queryByTestId('floor-map-container')).not.toBeInTheDocument();
   });
 
-  it('switches to the 2d map and remembers the choice', async () => {
+  it('switches to the 2d map only for this visit and opens in 3d again next time', async () => {
     const first = renderPage();
     await screen.findByTestId('floor-map-3d');
-    fireEvent.click(screen.getByRole('button', { name: '2D 도면' }));
+    fireEvent.click(screen.getByRole('button', { name: '2D' }));
     expect(await screen.findByTestId('floor-map-container')).toBeInTheDocument();
-    expect(localStorage.getItem('locuvera.mapDimension')).toBe('2d');
 
     first.unmount();
     renderPage();
-    expect(await screen.findByTestId('floor-map-container')).toBeInTheDocument();
-    expect(screen.queryByTestId('floor-map-3d')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('floor-map-3d')).toBeInTheDocument();
+    expect(screen.queryByTestId('floor-map-container')).not.toBeInTheDocument();
+  });
+
+  it('opens in 3d even when an earlier version remembered 2d', async () => {
+    localStorage.setItem('locuvera.mapDimension', '2d');
+    renderPage();
+    expect(await screen.findByTestId('floor-map-3d')).toBeInTheDocument();
   });
 
   it('opens 2d and disables the 3d button without WebGL', async () => {
     webgl.available = false;
-    localStorage.setItem('locuvera.mapDimension', '3d');
     renderPage();
     expect(await screen.findByTestId('floor-map-container')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '3D' })).toBeDisabled();
@@ -129,8 +133,6 @@ describe('EquipmentSearch 3d floor map', () => {
     fireEvent.click(screen.getByRole('button', { name: 'simulate-context-lost' }));
     expect(await screen.findByTestId('floor-map-container')).toBeInTheDocument();
     expect(screen.getByText('3D 보기를 불러오지 못해 2D로 표시합니다.')).toBeInTheDocument();
-    // 일시적인 실패라 사용자의 선택은 바꾸지 않는다
-    expect(localStorage.getItem('locuvera.mapDimension')).not.toBe('2d');
   });
 
   it('falls back to 2d when the 3d map crashes while rendering', async () => {

@@ -200,7 +200,7 @@ export class MapEngine {
   }
 
   // 남서쪽 위에서 층 외곽이 화면 가로 80%·세로 72%를 채우도록
-  resetView() {
+  private resetView() {
     if (!this.fitPoints.length) return;
     const dir = new THREE.Vector3(-0.5, 0.92, 0.78).normalize();
     const target = new THREE.Box3().setFromPoints(this.fitPoints).getCenter(new THREE.Vector3()).setY(0);
