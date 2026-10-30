@@ -1,15 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import EquipmentSearch from './EquipmentSearch';
 
 // three.js는 jsdom에서 돌지 않으므로 3D 지도는 받은 props만 드러내는 가짜로 바꾼다
 const fake = vi.hoisted(() => ({ throwOnRender: false }));
 vi.mock('../components/floor3d/FloorMap3D', () => ({
-  default: (props: { floor: number; onUnavailable: () => void }) => {
+  default: (props: { floor: number; equipment?: { label: string }[]; onUnavailable: () => void }) => {
     if (fake.throwOnRender) throw new Error('3d crashed');
     return (
-      <div data-testid="floor-map-3d" data-floor={props.floor}>
+      <div
+        data-testid="floor-map-3d"
+        data-floor={props.floor}
+        data-labels={props.equipment?.map((e) => e.label).join(',')}
+      >
         <button type="button" onClick={props.onUnavailable}>
           simulate-context-lost
         </button>
@@ -118,6 +122,11 @@ describe('EquipmentSearch 3d floor map', () => {
     localStorage.setItem('locuvera.mapDimension', '2d');
     renderPage();
     expect(await screen.findByTestId('floor-map-3d')).toBeInTheDocument();
+  });
+
+  it('hands the 3d map equipment names without their serial numbers', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('floor-map-3d')).toHaveAttribute('data-labels', '수액펌프'));
   });
 
   it('opens 2d and disables the 3d button without WebGL', async () => {

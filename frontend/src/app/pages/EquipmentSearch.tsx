@@ -298,11 +298,17 @@ export default function EquipmentSearch() {
     [readers, selectedFloor],
   );
 
+  // 지도에는 장비 이름만 쓴다 — 일련번호('수액펌프-001'의 '-001')는 목록에만 보인다
   const floorEquipmentDots = useMemo<FloorMapEquipmentDot[]>(() => {
     const pinReaderIds = new Set(floorPins.map((p) => p.reader_id));
     return searchAndTypeFilteredEquipment
       .filter((eq) => pinReaderIds.has(eq.readerId))
-      .map((eq) => ({ tag_id: eq.id, reader_id: eq.readerId, label: eq.name, assetStatus: eq.assetStatus }));
+      .map((eq) => ({
+        tag_id: eq.id,
+        reader_id: eq.readerId,
+        label: eq.name.replace(/-\d+$/, ''),
+        assetStatus: eq.assetStatus,
+      }));
   }, [floorPins, searchAndTypeFilteredEquipment]);
 
   // "층별 구역 안내": 선택된 층의 리더 구역(장비 추적 가능)과 편의시설 구역(floorZones.ts,
