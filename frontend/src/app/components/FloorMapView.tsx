@@ -52,7 +52,7 @@ const SPOTLIGHT_RING_SIZE = 40;
 // 넓힌다 — 점 크기(14px)는 터치 타겟 권장치보다 한참 작다.
 const MIN_TOUCH_HIT_SIZE = 28;
 
-type FloorMapViewProps = {
+export type FloorMapViewProps = {
   floor: FloorNumber;
   pins: FloorMapPin[];
   equipment?: FloorMapEquipmentDot[];
