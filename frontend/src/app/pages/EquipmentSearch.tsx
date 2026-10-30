@@ -21,13 +21,7 @@ import FloorMapView, {
 } from '../components/FloorMapView';
 import Map3DBoundary from '../components/floor3d/Map3DBoundary';
 import { FLOOR_MAPS, type FloorNumber } from '../lib/floorMaps';
-import {
-  isWebGLAvailable,
-  MAP_3D_ASPECT,
-  readMapDimension,
-  writeMapDimension,
-  type MapDimension,
-} from '../lib/mapDimension';
+import { DEFAULT_MAP_DIMENSION, isWebGLAvailable, MAP_3D_ASPECT, type MapDimension } from '../lib/mapDimension';
 import { getAmenityZonesForFloor } from '../lib/floorZones';
 import { ZONE_BOUNDS } from '../lib/floorZoneBounds';
 import { polygonCentroid } from '../lib/floorMapLayout';
@@ -97,15 +91,6 @@ type EquipmentViewItem = {
 // three.js는 3D 보기를 쓸 때만 내려받는다
 const FloorMap3D = lazy(() => import('../components/floor3d/FloorMap3D'));
 
-// 사생활 보호 모드 등에서는 localStorage 접근 자체가 예외를 던진다
-function browserStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 function getOnlineDotClass(isOnline: boolean) {
   return isOnline ? 'h-2.5 w-2.5 rounded-full dot-ok' : 'h-2.5 w-2.5 rounded-full dot-warn';
 }
@@ -148,16 +133,14 @@ export default function EquipmentSearch() {
   const [availableOnly, setAvailableOnly] = useState(false);
   const [hideSimulated, setHideSimulated] = useState(false);
   const [highlightedZone, setHighlightedZone] = useState<FloorMapHighlight | null>(null);
-  // 층 지도 2D/3D. WebGL이 없으면 항상 2D, 3D가 실패하면 이 화면에서만 2D로 바꾼다(선택은 유지).
+  // 층 지도 2D/3D. 열 때마다 3D이고 2D는 이 화면에서 고를 때만 쓴다(기억하지 않음).
+  // WebGL이 없으면 항상 2D, 3D가 실패하면 이 화면에서만 2D로 바꾼다.
   const [webglAvailable] = useState(isWebGLAvailable);
-  const [mapDimension, setMapDimension] = useState<MapDimension>(() =>
-    readMapDimension(browserStorage(), webglAvailable),
-  );
+  const [mapDimension, setMapDimension] = useState<MapDimension>(webglAvailable ? DEFAULT_MAP_DIMENSION : '2d');
   const [map3dFailed, setMap3dFailed] = useState(false);
   const chooseMapDimension = (value: MapDimension) => {
     setMapDimension(value);
     setMap3dFailed(false);
-    writeMapDimension(browserStorage(), value);
   };
   const showing3d = mapDimension === '3d' && webglAvailable && !map3dFailed;
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
@@ -315,11 +298,17 @@ export default function EquipmentSearch() {
     [readers, selectedFloor],
   );
 
+  // 지도에는 장비 이름만 쓴다 — 일련번호('수액펌프-001'의 '-001')는 목록에만 보인다
   const floorEquipmentDots = useMemo<FloorMapEquipmentDot[]>(() => {
     const pinReaderIds = new Set(floorPins.map((p) => p.reader_id));
     return searchAndTypeFilteredEquipment
       .filter((eq) => pinReaderIds.has(eq.readerId))
-      .map((eq) => ({ tag_id: eq.id, reader_id: eq.readerId, label: eq.name, assetStatus: eq.assetStatus }));
+      .map((eq) => ({
+        tag_id: eq.id,
+        reader_id: eq.readerId,
+        label: eq.name.replace(/-\d+$/, ''),
+        assetStatus: eq.assetStatus,
+      }));
   }, [floorPins, searchAndTypeFilteredEquipment]);
 
   // "층별 구역 안내": 선택된 층의 리더 구역(장비 추적 가능)과 편의시설 구역(floorZones.ts,
@@ -757,7 +746,7 @@ export default function EquipmentSearch() {
                             }`}
                             onClick={() => chooseMapDimension(value)}
                           >
-                            {value === '2d' ? '2D 도면' : '3D'}
+                            {value === '2d' ? '2D' : '3D'}
                           </button>
                         ))}
                       </div>

@@ -246,6 +246,23 @@ describe('EquipmentSearch map view', () => {
     expect(screen.getByTestId('floor-map-equipment-label-EQ-0002')).toBeInTheDocument();
   });
 
+  it('shows the equipment name without its serial number on the map, and in full in the list', async () => {
+    const item = { ...LIVE_PAYLOAD.items[1], equipment_name: '수액펌프-002' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...LIVE_PAYLOAD, count: 1, items: [item] }),
+      }),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId('floor-map-equipment-EQ-0002'));
+    expect(screen.getByTestId('floor-map-equipment-label-EQ-0002')).toHaveTextContent(/^수액펌프$/);
+    expect(sidebarItem('수액펌프-002')).toBeInTheDocument();
+  });
+
   it('pins the sidebar to the viewport on wide screens so page scroll never cuts its bottom off', async () => {
     renderPage();
 

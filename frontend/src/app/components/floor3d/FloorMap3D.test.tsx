@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import FloorMap3D from './FloorMap3D';
 import { ZONE_BOUNDS } from '../../lib/floorZoneBounds';
 
@@ -12,7 +12,6 @@ vi.mock('./mapEngine', () => ({
     setFocus = vi.fn();
     setHighlight = vi.fn();
     setLabelsVisible = vi.fn();
-    resetView = vi.fn();
     resize = vi.fn();
     dispose = vi.fn();
   },
@@ -70,5 +69,11 @@ describe('FloorMap3D', () => {
     view.rerender(<FloorMap3D {...props({ spotlightReaderIds: ['M201'] })} />);
     expect(engine.setFloor).toHaveBeenCalledTimes(2);
     expect(engine.setFloor.mock.calls[1][1]).toBe(false);
+  });
+
+  it('offers the label toggle but no reset-view button', () => {
+    render(<FloorMap3D {...props()} />);
+    expect(screen.getByRole('checkbox', { name: '이름표' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '시점 초기화' })).not.toBeInTheDocument();
   });
 });
