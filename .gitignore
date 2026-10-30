@@ -30,6 +30,8 @@ pnpm-debug.log*
 
 # Local artifacts
 .codex
+.claude/
+.archify/
 *.log
 backups/
 .logs/
