@@ -116,7 +116,8 @@ export function tagColors(
   return { background: '#fff', color: STATUS_TEXT[status] ?? NAVY };
 }
 
-// 원근 카메라에서 화면 1px이 그 깊이(카메라 앞 방향 거리)의 장면 단위로 얼마인가. 구슬을 확대와 관계없이 같은 화면 크기로 그린다
+// 원근 카메라에서 화면 1px이 그 깊이(카메라 앞 방향 거리)의 장면 단위로 얼마인가
+// 구슬의 장면 지름과 화면 px 사이를 바꿀 때 쓴다
 export function worldPerPixel(depth: number, fovDeg: number, viewportHeight: number): number {
   return (2 * depth * Math.tan((fovDeg * Math.PI) / 360)) / viewportHeight;
 }
@@ -166,7 +167,8 @@ export function createQualityGovernor() {
   };
 }
 
-// 처음 화면(층 전체)에서 지도 상자 폭의 2%인 핀 지름을 장면 길이로 바꾼다. fitWorldPerPixel: 그때 목표점 깊이에서 화면 1px의 장면 길이
+// 처음 화면(층 전체)에서 지도 상자 폭의 2%인 핀 지름을 장면 길이로 바꾼다
+// fitWorldPerPixel: 그때 목표점 깊이에서 화면 1px의 장면 길이
 export function pinWorldDiameter(mapWidthPx: number, fitWorldPerPixel: number): number {
   return pinDiameter(mapWidthPx) * fitWorldPerPixel;
 }
@@ -206,8 +208,8 @@ function invertAcesFit(y: number): number {
   return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
 }
 
-// 3D 구슬은 마지막 OutputPass가 화면 전체에 ACES 톤 매핑을 걸어 색이 바랜다(재질의 toneMapped로는 못 막는다).
-// 톤 매핑 뒤 hex가 그대로 나오도록, 재질에 넣을 선형 입력색을 거꾸로 구한다
+// 마지막 OutputPass가 화면 전체에 ACES 톤 매핑을 걸어 3D 구슬 색이 바랜다(재질의 toneMapped로는 못 막는다)
+// 톤 매핑 뒤 hex가 그대로 나오도록 재질에 넣을 선형 입력색을 거꾸로 구한다
 export function acesFilmicInverse(hex: string, exposure = 1): [number, number, number] {
   const target = [1, 3, 5].map((i) => {
     const c = parseInt(hex.slice(i, i + 2), 16) / 255;

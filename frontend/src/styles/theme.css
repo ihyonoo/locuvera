@@ -79,8 +79,9 @@
   --skeleton-shimmer: rgb(15 46 79 / 0.07);
 }
 
-/* 다크 모드 — 마이페이지에서 고르면 html.dark가 붙는다(lib/theme.ts). 회색·검정 계열.
-   화면(screen)에서만 적용해 증명서 인쇄는 늘 라이트다. --primary(청록 글자·선)는 다크에서도 4.5:1을 넘어 그대로 둔다 */
+/* 다크 모드 — 마이페이지에서 고르면 html.dark가 붙는다(lib/theme.ts), 회색·검정 계열 */
+/* 화면(screen)에서만 적용해 증명서 인쇄는 늘 라이트다 */
+/* --primary(청록 글자·선)는 다크에서도 4.5:1을 넘어 그대로 둔다 */
 @media screen {
   html.dark {
     color-scheme: dark;
@@ -138,8 +139,8 @@
   }
 }
 
-/* 다크 모드의 2D 평면도(흰 바탕 병원 안내도) — 파일은 그대로 두고 화면에서만 반전한다.
-   반전으로 생긴 검은 바탕은 screen 혼합으로 지도 상자 배경(--card)과 같은 색이 된다 */
+/* 다크 모드의 2D 평면도(흰 바탕 병원 안내도) — 파일은 그대로 두고 화면에서만 반전한다 */
+/* 반전으로 생긴 검은 바탕은 screen 혼합으로 지도 상자 배경(--card)과 같은 색이 된다 */
 @media screen {
   html.dark .floor-map__plan {
     filter: invert(1) hue-rotate(180deg);
@@ -384,7 +385,8 @@
     text-decoration: none;
   }
 
-  /* 방패+글자 로고(BrandLogo). 높이 = 예전 글자 로고 1.5rem × 방패 1.1. 방패 왼쪽·"Locu"는 글자색을 따른다 */
+  /* 방패+글자 로고(BrandLogo) — 높이 = 예전 글자 로고 1.5rem × 방패 1.1 */
+  /* 방패 왼쪽·"Locu"는 글자색을 따른다 */
   .brand-logo {
     display: block;
     height: 1.65rem;
