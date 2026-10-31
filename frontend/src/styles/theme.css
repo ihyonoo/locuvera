@@ -1126,8 +1126,9 @@ html:has(.auth-split)::-webkit-scrollbar {
   background: var(--err-solid);
 }
 
-/* 제출 버튼 — 평소엔 카드 색에 진한 회색 글자, 올리거나 키보드로 고르면 청록이 번지듯 채워진다 */
-.auth-split button[type='submit'][data-slot='button'] {
+/* 제출·데모 버튼 — 평소엔 카드 색에 진한 회색 글자, 올리거나 키보드로 고르면 청록이 번지듯 채워진다 */
+.auth-split button[type='submit'][data-slot='button'],
+.auth-split .auth-split__demo[data-slot='button'] {
   position: relative;
   overflow: hidden;
   border-color: var(--input);
@@ -1141,14 +1142,17 @@ html:has(.auth-split)::-webkit-scrollbar {
 }
 
 .auth-split button[type='submit'][data-slot='button']:hover,
-.auth-split button[type='submit'][data-slot='button']:focus-visible {
+.auth-split button[type='submit'][data-slot='button']:focus-visible,
+.auth-split .auth-split__demo[data-slot='button']:hover,
+.auth-split .auth-split__demo[data-slot='button']:focus-visible {
   border-color: transparent;
   background: var(--primary-solid);
   color: var(--primary-foreground);
 }
 
 /* 빛줄기 — 비스듬한 흰 띠가 버튼을 가로지른다(영상처럼). 올리면 왼쪽→오른쪽, 떼면 거꾸로 지나간다 */
-.auth-split button[type='submit'][data-slot='button']::after {
+.auth-split button[type='submit'][data-slot='button']::after,
+.auth-split .auth-split__demo[data-slot='button']::after {
   content: '';
   position: absolute;
   top: -50%;
@@ -1162,12 +1166,15 @@ html:has(.auth-split)::-webkit-scrollbar {
 }
 
 .auth-split button[type='submit'][data-slot='button']:hover::after,
-.auth-split button[type='submit'][data-slot='button']:focus-visible::after {
+.auth-split button[type='submit'][data-slot='button']:focus-visible::after,
+.auth-split .auth-split__demo[data-slot='button']:hover::after,
+.auth-split .auth-split__demo[data-slot='button']:focus-visible::after {
   left: 120%;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-split button[type='submit'][data-slot='button']::after {
+  .auth-split button[type='submit'][data-slot='button']::after,
+  .auth-split .auth-split__demo[data-slot='button']::after {
     transition: none;
   }
 }

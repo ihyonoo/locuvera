@@ -155,6 +155,8 @@ describe('Login fields', () => {
     renderLogin();
     expect(screen.getByRole('button', { name: '의료진 데모' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '관리자 데모' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '의료진 데모' })).toHaveClass('auth-split__demo');
+    expect(screen.getByRole('button', { name: '관리자 데모' })).toHaveClass('auth-split__demo');
     expect(screen.queryByText(/데모 계정으로 체험/)).not.toBeInTheDocument();
   });
 
