@@ -3405,6 +3405,375 @@ html:has(.staff) [data-slot='select-item'] {
   text-align: right;
 }
 
+/* ── 가동률 분석 ── */
+/* 요약은 제목 바로 옆 작은 한 줄 — 라벨은 회색, 값은 굵게. 좁으면 제목 아래로 */
+.staff-util-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1.75rem;
+}
+
+.staff-util-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1.25rem;
+}
+
+.staff-util-summary > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.staff-util-summary dd {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 왼쪽 목록 : 오른쪽 상세 = 1 : 1.7 — 히트맵이 화면의 중심 */
+.staff-util-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+  align-items: start;
+  gap: 1.25rem;
+}
+
+/* 판정: 색 상자 없이 점 + 글자 */
+.staff-util-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.staff-util-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.staff-util-dot--shortage {
+  background: var(--staff-busy);
+}
+
+.staff-util-dot--adequate {
+  background: var(--staff-teal);
+}
+
+.staff-util-dot--idle {
+  background: #9a9a9a;
+}
+
+.staff-util-dot--essential {
+  border: 1.5px solid #9a9a9a;
+}
+
+.staff-util-bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 0.4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--staff-track);
+}
+
+.staff-util-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--staff-teal);
+}
+
+/* 종류 행: 이름 · 막대 · 판정. 고른 행은 옅은 면 */
+.staff-util-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(9rem, 1.6fr) minmax(5rem, 1fr) 7rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0.6rem;
+  border-radius: 0.75rem;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.staff-util-row + .staff-util-row {
+  margin-top: 1px;
+  box-shadow: 0 -1px 0 var(--staff-line);
+}
+
+.staff-util-row:hover {
+  background: var(--staff-hover);
+}
+
+.staff-util-row--on,
+.staff-util-row--on:hover {
+  background: var(--staff-fill);
+}
+
+.staff-util-row__name {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.staff-util-row__name .staff-note {
+  font-weight: 500;
+}
+
+.staff-util-row__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 오른쪽 상세는 넓은 화면에서 스크롤을 따라온다 */
+.staff-util-detail {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.staff-util-detail__sentence {
+  margin-top: 0.6rem;
+  font-size: 1rem;
+}
+
+.staff-util-units li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(6rem, 1.4fr) 2.75rem 5rem;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--staff-line);
+  font-size: 0.9rem;
+}
+
+/* 히트맵: 칸 농도는 그 히트맵의 최댓값 기준 */
+.staff-util-heat {
+  margin-top: 1.25rem;
+}
+
+.staff-util-heat__scroll {
+  overflow-x: auto;
+}
+
+.staff-util-heat__grid {
+  display: grid;
+  min-width: 44rem;
+  grid-template-columns: 1.75rem repeat(24, minmax(1.5rem, 1fr));
+  gap: 3px;
+}
+
+.staff-util-heat__cell {
+  height: 2.25rem;
+  border-radius: 5px;
+  background: var(--staff-fill);
+}
+
+.staff-util-heat__hour,
+.staff-util-heat__day {
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-util-heat__legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.staff-util-heat__ramp {
+  width: 7rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--staff-fill), var(--staff-teal));
+}
+
+/* 그래프 형태 전환(그래프·히트맵) — 장비 검색의 2D/3D 단추와 같은 작은 알약 */
+.staff-util-chartbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+/* 선 그래프: 축·눈금은 HTML, 선은 SVG */
+.staff-util-chart {
+  margin-top: 1rem;
+}
+
+.staff-util-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.85rem;
+}
+
+.staff-util-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.staff-util-key {
+  display: inline-block;
+  width: 1rem;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.staff-util-key--weekday {
+  background: var(--staff-teal);
+}
+
+.staff-util-key--weekend {
+  background: var(--staff-muted);
+}
+
+.staff-util-lines {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  grid-template-rows: 17rem auto;
+  column-gap: 0.6rem;
+}
+
+.staff-util-lines__axis {
+  position: relative;
+}
+
+.staff-util-lines__axis > span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-util-lines__plot {
+  position: relative;
+  border-bottom: 1px solid var(--staff-line-strong);
+}
+
+.staff-util-lines__grid {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--staff-line);
+}
+
+.staff-util-lines__plot > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.staff-util-line {
+  fill: none;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.staff-util-line--weekday {
+  stroke: var(--staff-teal);
+}
+
+.staff-util-line--weekend {
+  stroke: var(--staff-muted);
+}
+
+/* 시간대마다 마우스 영역 — 올리면 세로 보조선 */
+.staff-util-lines__hits {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.staff-util-lines__hits > span {
+  position: relative;
+  flex: 1;
+}
+
+.staff-util-lines__hits > span:hover::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 1px solid var(--staff-line-strong);
+  content: '';
+}
+
+.staff-util-lines__x {
+  display: flex;
+  grid-column: 2;
+  margin-top: 0.4rem;
+}
+
+.staff-util-lines__x > span {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 1024px 미만: 한 열, 상세를 목록 위에 */
+@media (max-width: 1023px) {
+  .staff-util-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .staff-util-detail {
+    position: static;
+    order: -1;
+  }
+}
+
+/* 900px 미만: 행의 막대를 이름 아래 줄로 */
+@media (max-width: 899px) {
+  .staff-util-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 1rem;
+  }
+
+  .staff-util-row__bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .staff-util-units li {
+    grid-template-columns: minmax(0, 1fr) 2.75rem 4.5rem;
+  }
+
+  .staff-util-units li > .staff-util-bar {
+    display: none;
+  }
+}
+
 .staff-nfc-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

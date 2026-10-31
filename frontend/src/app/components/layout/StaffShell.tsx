@@ -9,7 +9,8 @@ import { useMediaQuery } from '../../lib/useMediaQuery';
 
 export type StaffMenu = 'staff' | 'admin';
 
-export type StaffPageKey = 'equipment' | 'mypage' | 'verification' | 'nfc-mapping' | 'devices' | 'signup-requests';
+export type StaffPageKey =
+  'equipment' | 'mypage' | 'verification' | 'nfc-mapping' | 'devices' | 'utilization' | 'signup-requests';
 
 const MENUS: Record<StaffMenu, { key: StaffPageKey; label: string; path: string }[]> = {
   staff: [
@@ -18,6 +19,7 @@ const MENUS: Record<StaffMenu, { key: StaffPageKey; label: string; path: string 
   ],
   admin: [
     { key: 'verification', label: '이력 조회', path: '/verification' },
+    { key: 'utilization', label: '가동률 분석', path: '/admin/utilization' },
     { key: 'nfc-mapping', label: 'NFC 매핑', path: '/admin/nfc-mapping' },
     { key: 'devices', label: '기기 상태', path: '/admin/devices' },
     { key: 'signup-requests', label: '가입 승인', path: '/admin/signup-requests' },

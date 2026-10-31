@@ -14,6 +14,7 @@ import IntegrityVerification from './pages/IntegrityVerification';
 import NfcMapping from './pages/NfcMapping';
 import NfcEquipment from './pages/NfcEquipment';
 import DeviceStatus from './pages/DeviceStatus';
+import EquipmentUtilization from './pages/EquipmentUtilization';
 import SignupRequests from './pages/SignupRequests';
 
 export const router = createBrowserRouter([
@@ -68,6 +69,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin/devices',
     Component: DeviceStatus,
+  },
+  {
+    path: '/admin/utilization',
+    Component: EquipmentUtilization,
   },
   {
     path: '/admin/nfc-mapping',

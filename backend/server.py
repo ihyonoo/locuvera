@@ -98,6 +98,14 @@ try:
         query_usage_history_rows,
         verify_usage_history_integrity,
     )
+    from backend.utilization import (
+        KST,
+        PERIOD_DAYS,
+        compute_utilization,
+        floor_to_hour,
+        load_utilization_inputs,
+        resolve_start,
+    )
 except ModuleNotFoundError as exc:
     if not exc.name or not exc.name.startswith("backend"):
         raise
@@ -184,6 +192,14 @@ except ModuleNotFoundError as exc:
         query_my_usage_history_rows,
         query_usage_history_rows,
         verify_usage_history_integrity,
+    )
+    from utilization import (
+        KST,
+        PERIOD_DAYS,
+        compute_utilization,
+        floor_to_hour,
+        load_utilization_inputs,
+        resolve_start,
     )
 
 app = FastAPI()
@@ -1149,6 +1165,30 @@ def list_admin_readers(
         raise HTTPException(500, "리더 목록 조회 중 데이터베이스 오류가 발생했습니다.")
 
     return {"ok": True, "count": len(items), "items": items}
+
+
+@app.get("/admin/utilization")
+def get_equipment_utilization(
+    days: int = Query(default=30),
+    authorization: str | None = Header(default=None),
+):
+    require_authenticated_user(authorization, allowed_roles={"admin"})
+    if days not in PERIOD_DAYS:
+        raise HTTPException(400, "분석 기간은 7, 30, 90일 중 하나여야 합니다.")
+
+    end = floor_to_hour(dt.datetime.now(KST))
+    requested_start = end - dt.timedelta(days=days)
+    try:
+        units, intervals, earliest = load_utilization_inputs(requested_start, end)
+    except Exception:
+        raise HTTPException(500, "가동률 조회 중 데이터베이스 오류가 발생했습니다.")
+
+    start = resolve_start(requested_start, earliest)
+    return {
+        "ok": True,
+        "period": {"days": days, "start": start.isoformat(), "end": end.isoformat()},
+        **compute_utilization(units, intervals, start, end),
+    }
 
 
 @app.get("/admin/nfc-mappings")
