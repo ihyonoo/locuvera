@@ -1,94 +1,17 @@
-"""/auth/register, /auth/login 통합 테스트.
+"""/auth/login과 Google 로그인 통합 테스트.
 
-실제 이메일 발송(SMTP)은 register 성공 경로에서 항상 호출되므로,
-테스트 중 진짜 메일이 나가지 않도록 매 테스트에서 발송 함수를 무력화한다.
+테스트 중 진짜 메일이 나가지 않도록 매 테스트에서 인증 메일 발송 함수를 무력화한다.
 """
 
 import pytest
 
 from backend import google_oauth
 from backend.auth_tokens import create_action_token
-from backend.auth_utils import pwd
 
 
 @pytest.fixture(autouse=True)
 def _no_real_email(monkeypatch):
     monkeypatch.setattr("backend.server._send_verification_email_for", lambda *a, **k: None)
-
-
-def _register(client, **overrides):
-    body = {
-        "username": "newstaff",
-        "display_name": "새 직원",
-        "password": "Str0ng!Passw0rd",
-        "email": "newstaff@example.com",
-        "position": "간호사",
-        "role": "staff",
-    }
-    body.update(overrides)
-    return client.post("/auth/register", json=body)
-
-
-class TestRegister:
-    def test_register_staff_success(self, client, db_conn):
-        response = _register(client)
-
-        assert response.status_code == 200
-        body = response.json()
-        assert body["ok"] is True
-        assert body["user"]["username"] == "newstaff"
-        assert body["user"]["role"] == "staff"
-
-        with db_conn.cursor() as cur:
-            cur.execute(
-                "SELECT email_verified, password_hash FROM users WHERE username = %s",
-                ("newstaff",),
-            )
-            email_verified, password_hash = cur.fetchone()
-        assert email_verified is False
-        assert pwd.verify("Str0ng!Passw0rd", password_hash)
-
-    def test_register_admin_success_ignores_position(self, client, db_conn):
-        response = _register(
-            client, username="newadmin", email="newadmin@example.com", role="admin", position="무시될값"
-        )
-
-        assert response.status_code == 200
-        assert response.json()["user"]["can_manage_nfc"] is False
-        with db_conn.cursor() as cur:
-            cur.execute("SELECT position, can_manage_nfc FROM users WHERE username = %s", ("newadmin",))
-            position, can_manage_nfc = cur.fetchone()
-        assert position is None
-        assert can_manage_nfc is False
-
-    def test_register_rejects_duplicate_username(self, client, seed_user):
-        seed_user(username="newstaff")
-
-        response = _register(client, email="other@example.com")
-
-        assert response.status_code == 409
-
-    def test_register_rejects_duplicate_email(self, client, seed_user):
-        seed_user(username="someoneelse", email="newstaff@example.com")
-
-        response = _register(client)
-
-        assert response.status_code == 409
-
-    def test_register_rejects_invalid_role(self, client):
-        response = _register(client, role="superuser")
-
-        assert response.status_code == 400
-
-    def test_register_rejects_staff_without_position(self, client):
-        response = _register(client, position=None)
-
-        assert response.status_code == 400
-
-    def test_register_rejects_weak_password(self, client):
-        response = _register(client, password="123")
-
-        assert response.status_code == 400
 
 
 class TestLogin:

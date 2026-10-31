@@ -29,6 +29,7 @@ try:
     )
     from backend.demo_history import build_blockchain_demo_history
     from backend.email_utils import (
+        send_account_setup_email,
         send_find_id_email,
         send_reset_email,
         send_verification_email,
@@ -66,14 +67,16 @@ try:
         NfcUsageActionRequest,
         NtagBindingRequest,
         Payload,
-        RegisterRequest,
         ResendVerificationRequest,
         ResetPasswordRequest,
         SessionExchangeRequest,
+        SignupApproveRequest,
+        SignupRequestCreate,
         VerifyEmailRequest,
         WithdrawRequest,
     )
     from backend.settings import (
+        ACCOUNT_SETUP_TTL_SEC,
         APP_PUBLIC_URL,
         DATABASE_URL,
         DEMO_LOGIN_ENABLED,
@@ -113,6 +116,7 @@ except ModuleNotFoundError as exc:
     )
     from demo_history import build_blockchain_demo_history
     from email_utils import (
+        send_account_setup_email,
         send_find_id_email,
         send_reset_email,
         send_verification_email,
@@ -150,14 +154,16 @@ except ModuleNotFoundError as exc:
         NfcUsageActionRequest,
         NtagBindingRequest,
         Payload,
-        RegisterRequest,
         ResendVerificationRequest,
         ResetPasswordRequest,
         SessionExchangeRequest,
+        SignupApproveRequest,
+        SignupRequestCreate,
         VerifyEmailRequest,
         WithdrawRequest,
     )
     from settings import (
+        ACCOUNT_SETUP_TTL_SEC,
         APP_PUBLIC_URL,
         DATABASE_URL,
         DEMO_LOGIN_ENABLED,
@@ -276,66 +282,49 @@ def _send_verification_email_for(user_id: int, email: str) -> None:
     send_verification_email(email, link)
 
 
-@app.post("/auth/register")
-def register(body: RegisterRequest):
-    username = normalize_username(body.username)
+EMPLOYEE_NO_PATTERN = re.compile(r"^[0-9]{8}$")
+EMPLOYEE_NO_TAKEN = "이미 가입되었거나 요청 중인 사번입니다."
+EMAIL_TAKEN = "이미 가입되었거나 요청 중인 이메일입니다."
+
+
+@app.post("/auth/signup-requests")
+def create_signup_request(body: SignupRequestCreate):
+    # 공개 가입은 요청만 남긴다. 계정은 관리자가 승인할 때 만든다.
+    employee_no = body.employee_no.strip()
+    if not EMPLOYEE_NO_PATTERN.fullmatch(employee_no):
+        raise HTTPException(400, "사번은 숫자 8자리여야 합니다.")
     display_name = normalize_display_name(body.display_name)
-    role = body.role.strip().lower()
-    password = validate_password(body.password)
     email = normalize_email(body.email)
-    position = normalize_optional_text(body.position, "position")
-    department = normalize_optional_text(body.department, "department")
 
-    if role not in ("admin", "staff"):
-        raise HTTPException(400, "role은 admin 또는 staff여야 합니다.")
-    if role == "staff" and not position:
-        raise HTTPException(400, "staff 계정은 position이 필수입니다.")
-    if role == "admin":
-        position = None
-        department = None
-
-    password_hash = pwd.hash(password)
-
-    sql = """
-    INSERT INTO users (username, display_name, role, department, position, email,
-                       password_hash, email_verified, is_active, created_at)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE, %s, now())
-    RETURNING user_id, username, display_name, role, department, position, email,
-              email_verified, is_active, can_manage_nfc
-    """
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
             cur.execute(
-                sql,
-                (
-                    username,
-                    display_name,
-                    role,
-                    department,
-                    position,
-                    email,
-                    password_hash,
-                    body.is_active,
-                ),
+                """
+                SELECT EXISTS (SELECT 1 FROM users WHERE username = %s),
+                       EXISTS (SELECT 1 FROM users WHERE email = %s)
+                """,
+                (employee_no, email),
             )
-            row = cur.fetchone()
+            username_taken, email_taken = cur.fetchone()
+            if username_taken:
+                raise HTTPException(409, EMPLOYEE_NO_TAKEN)
+            if email_taken:
+                raise HTTPException(409, EMAIL_TAKEN)
+            cur.execute(
+                "INSERT INTO signup_requests (employee_no, display_name, email) VALUES (%s, %s, %s)",
+                (employee_no, display_name, email),
+            )
+    except HTTPException:
+        raise
     except psycopg.errors.UniqueViolation as exc:
-        # username 또는 email 중복 — 어느 쪽인지 제약 이름으로 구분한다.
-        if "email" in str(getattr(exc, "diag", None) and exc.diag.constraint_name or "").lower():
-            raise HTTPException(409, "이미 사용 중인 이메일입니다.")
-        raise HTTPException(409, "이미 존재하는 username입니다.")
+        # 대기 요청끼리의 중복 — 어느 쪽인지 제약 이름으로 구분한다.
+        raise HTTPException(409, EMAIL_TAKEN if "email" in (exc.diag.constraint_name or "") else EMPLOYEE_NO_TAKEN)
     except Exception:
-        raise HTTPException(500, "회원가입 처리 중 데이터베이스 오류가 발생했습니다.")
-
-    _send_verification_email_for(row[0], email)
+        raise HTTPException(500, "가입 요청 처리 중 데이터베이스 오류가 발생했습니다.")
 
     return {
         "ok": True,
-        "email_verification_sent": True,
-        "user": {
-            **build_user_payload(row, can_manage_nfc=row[9]),
-            "is_active": row[8],
-        },
+        "message": "가입 요청이 접수되었습니다. 관리자가 승인하면 입력한 이메일로 비밀번호 설정 링크를 보냅니다.",
     }
 
 
@@ -593,10 +582,12 @@ def reset_password(body: ResetPasswordRequest):
                 raise HTTPException(400, "유효하지 않거나 만료된 재설정 링크입니다.")
             password_hash = pwd.hash(password)
             # token_version 을 증가시켜 기존에 발급된 모든 세션 토큰을 무효화한다.
+            # 메일 링크로 들어왔으므로 메일 소유도 확인된 것으로 본다(가입 승인 메일 포함).
             cur.execute(
                 """
                 UPDATE users
                 SET password_hash = %s,
+                    email_verified = TRUE,
                     token_version = token_version + 1,
                     updated_at = NOW()
                 WHERE user_id = %s
@@ -1033,6 +1024,108 @@ def where(tag_id: str, authorization: str | None = Header(default=None)):
         "updated_at": snapshot["updated_at"],
         "is_stale": snapshot["is_stale"],
     }
+
+
+# 가입 요청에는 요청자의 사번·이름·이메일이 있으므로 누구나 들어오는 데모 관리자에게는 막는다.
+@app.get("/admin/signup-requests")
+def list_signup_requests(authorization: str | None = Header(default=None)):
+    user = require_authenticated_user(authorization, allowed_roles={"admin"})
+    _reject_demo_account(user)
+    try:
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT request_id, employee_no, display_name, email, created_at
+                FROM signup_requests
+                ORDER BY created_at ASC, request_id ASC
+                """
+            )
+            rows = cur.fetchall()
+    except Exception:
+        raise HTTPException(500, "가입 요청 목록 조회 중 데이터베이스 오류가 발생했습니다.")
+
+    items = [
+        {
+            "request_id": row[0],
+            "employee_no": row[1],
+            "display_name": row[2],
+            "email": row[3],
+            "created_at": row[4],
+        }
+        for row in rows
+    ]
+    return {"ok": True, "count": len(items), "items": items}
+
+
+@app.post("/admin/signup-requests/{request_id}/approve")
+def approve_signup_request(
+    request_id: int,
+    body: SignupApproveRequest,
+    authorization: str | None = Header(default=None),
+):
+    user = require_authenticated_user(authorization, allowed_roles={"admin"})
+    _reject_demo_account(user)
+    role = body.role.strip().lower()
+    department = normalize_optional_text(body.department, "department")
+    position = normalize_optional_text(body.position, "position")
+    if role not in ("admin", "staff"):
+        raise HTTPException(400, "role은 admin 또는 staff여야 합니다.")
+    if role == "staff" and not position:
+        raise HTTPException(400, "staff 계정은 position이 필수입니다.")
+    if role == "admin":
+        department = None
+        position = None
+
+    try:
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            # 요청을 지우면서 꺼내므로 두 관리자가 동시에 승인해도 한 명만 계정을 만든다.
+            cur.execute(
+                "DELETE FROM signup_requests WHERE request_id = %s RETURNING employee_no, display_name, email",
+                (request_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(404, "가입 요청을 찾을 수 없습니다.")
+            employee_no, display_name, email = row
+            # 비밀번호는 요청자가 설정 메일의 링크로 정한다.
+            cur.execute(
+                """
+                INSERT INTO users (username, display_name, role, department, position, email,
+                                   password_hash, email_verified, is_active, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NULL, FALSE, TRUE, now())
+                RETURNING user_id
+                """,
+                (employee_no, display_name, role, department, position, email),
+            )
+            user_id = cur.fetchone()[0]
+    except HTTPException:
+        raise
+    except psycopg.errors.UniqueViolation:
+        # 요청 뒤에 같은 사번·이메일의 계정이 생겼다. 롤백되어 요청은 남는다.
+        raise HTTPException(409, "같은 사번이나 이메일의 계정이 이미 있습니다.")
+    except Exception:
+        raise HTTPException(500, "가입 승인 처리 중 데이터베이스 오류가 발생했습니다.")
+
+    # 토큰은 별도 연결로 저장되어 커밋된 계정을 참조해야 하므로 커밋 뒤에 발급한다.
+    raw_token = create_action_token(purpose="password_reset", ttl_sec=ACCOUNT_SETUP_TTL_SEC, user_id=user_id)
+    link = f"{APP_PUBLIC_URL}/reset-password?token={urllib.parse.quote(raw_token)}"
+    send_account_setup_email(email, employee_no, role, link)
+    return {"ok": True, "user": {"user_id": user_id, "username": employee_no, "role": role}}
+
+
+@app.delete("/admin/signup-requests/{request_id}")
+def reject_signup_request(request_id: int, authorization: str | None = Header(default=None)):
+    user = require_authenticated_user(authorization, allowed_roles={"admin"})
+    _reject_demo_account(user)
+    try:
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM signup_requests WHERE request_id = %s", (request_id,))
+            deleted = cur.rowcount
+    except Exception:
+        raise HTTPException(500, "가입 요청 거절 중 데이터베이스 오류가 발생했습니다.")
+    if not deleted:
+        raise HTTPException(404, "가입 요청을 찾을 수 없습니다.")
+    return {"ok": True}
 
 
 @app.get("/admin/readers")

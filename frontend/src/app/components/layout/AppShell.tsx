@@ -63,7 +63,7 @@ export default function AppShell({
       <header className="app-shell__topbar">
         <div className={containerClass}>
           <nav className="app-shell__nav">
-            {/* 로고는 홈 버튼 — 로그아웃 상태면 랜딩, 로그인 상태면 권한별 첫 화면으로 보낸다. */}
+            {/* 로고는 홈 버튼 — 로그아웃 상태면 로그인, 로그인 상태면 권한별 첫 화면으로 보낸다. */}
             <Link to={getHomePath(getStoredAuthUser())} className="brand-lockup">
               <BrandLogo className="brand-logo" />
             </Link>

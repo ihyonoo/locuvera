@@ -18,7 +18,7 @@ const PAGES: { path: string; hash?: string; element: ReactElement; heading: stri
     heading: 'Login',
     buttons: ['Login', '회원가입', '아이디 찾기', '비밀번호 찾기'],
   },
-  { path: '/signup', element: <SignUp />, heading: 'Sign up', buttons: ['Create account', '로그인으로 돌아가기'] },
+  { path: '/signup', element: <SignUp />, heading: 'Sign up', buttons: ['Send request', '로그인으로 돌아가기'] },
   {
     path: '/signup/complete',
     hash: '#pending=p&email=a%40b.com&name=n',

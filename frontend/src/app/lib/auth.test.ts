@@ -6,8 +6,8 @@ function user(role: string): AuthUser {
 }
 
 describe('getHomePath', () => {
-  it('sends signed-out visitors to the landing page', () => {
-    expect(getHomePath(null)).toBe('/');
+  it('sends signed-out visitors to the login page', () => {
+    expect(getHomePath(null)).toBe('/login');
   });
 
   it('sends admins to the usage history page', () => {

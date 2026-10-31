@@ -28,7 +28,7 @@
   --chart-3: #274a6b;
   --chart-4: #5eead4;
   --chart-5: #99f6e4;
-  /* 랜딩 외 앱 화면은 각진 모서리로 통일 — 반경 토큰은 전부 0 */
+  /* 앱 화면은 각진 모서리로 통일 — 반경 토큰은 전부 0 */
   --radius: 0px;
   --sidebar: #ffffff;
   --sidebar-foreground: #0f2e4f;
@@ -344,7 +344,7 @@
     max-width: 1440px;
   }
 
-  /* topbar만 예외: 로고/메뉴가 컨테이너 폭 제한 없이 화면 가장자리에 붙는다(랜딩 nav와 동일 패턴) */
+  /* topbar만 예외: 로고/메뉴가 컨테이너 폭 제한 없이 화면 가장자리에 붙는다 */
   .app-shell__topbar .app-shell__container {
     max-width: none;
     padding-inline: clamp(1rem, 2.5vw, 2rem);
@@ -356,7 +356,6 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 0.6rem 1rem;
-    /* 랜딩 nav(.landing__nav-inner)와 동일한 높이·패딩 */
     min-height: 4.8rem;
     padding-block: 0.9rem;
   }
@@ -613,6 +612,12 @@
     color: var(--ok-fg);
   }
 
+  .alert-warn {
+    border-color: var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+  }
+
   .fade-rise {
     animation: fade-rise 0.4s ease both;
   }
@@ -690,7 +695,7 @@
   }
 }
 
-/* 상단바 메뉴는 랜딩 nav 링크(.landing__nav-link)와 동일한 텍스트 링크 스타일 */
+/* 상단바 메뉴는 텍스트 링크 스타일 */
 /* 레이어 밖 규칙이라 Tailwind 유틸리티 우선순위를 상회한다 */
 .app-nav-tab {
   position: relative;
@@ -1055,6 +1060,41 @@ html:has(.auth-split)::-webkit-scrollbar {
     inset -3px -3px 6px var(--auth-shadow-light);
 }
 
+/* 안내(성공·오류) — 납작한 색 상자 대신 입력칸처럼 카드에 파인 홈으로 그린다 */
+/* 종류는 앞의 점 색(성공 청록, 오류 주황)과 글자색으로 구분한다 */
+/* 한국어는 낱말 중간에서 줄을 바꾸지 않고, 긴 이메일만 필요할 때 끊는다 */
+.auth-split .alert {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--auth-bg);
+  color: var(--foreground);
+  box-shadow:
+    inset 3px 3px 6px var(--auth-shadow-dark),
+    inset -3px -3px 6px var(--auth-shadow-light);
+}
+
+.auth-split .alert-success::before,
+.auth-split .alert-error::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  vertical-align: 0.1em;
+  background: var(--primary-solid);
+}
+
+.auth-split .alert-error {
+  color: var(--err-fg);
+}
+
+.auth-split .alert-error::before {
+  background: var(--err-solid);
+}
+
 /* 제출 버튼 — 평소엔 카드 색에 진한 회색 글자, 올리거나 키보드로 고르면 청록이 번지듯 채워진다 */
 .auth-split button[type='submit'][data-slot='button'] {
   position: relative;
@@ -1101,7 +1141,7 @@ html:has(.auth-split)::-webkit-scrollbar {
   }
 }
 
-/* 카드 머리줄 왼쪽 로고 — 랜딩으로 간다 */
+/* 카드 머리줄 왼쪽 로고 — 로그인 화면으로 간다 */
 /* 카드에 눌러 찍은(음각) 모양: 방패 왼쪽·"Locu"(currentColor)는 카드보다 조금 어두운 회색, 청록 부분은 그대로 */
 /* 오른쪽 아래 흰 선 + 왼쪽 위 어두운 선으로 파인 홈처럼 보이게 한다 */
 .auth-brand {

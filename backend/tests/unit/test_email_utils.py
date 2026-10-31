@@ -121,6 +121,32 @@ class TestConfiguredSend:
         assert "bob" in body
 
 
+class TestAccountSetupEmail:
+    """가입 승인 메일이 로그인 정보(사번·권한)와 설정 링크·만료를 알려 주는지 검증."""
+
+    def test_tells_employee_no_role_link_and_expiry(self, configured_smtp, mock_smtp):
+        _smtp_cls, server = mock_smtp
+        email_utils.send_account_setup_email(
+            "user@example.com", "20261031", "admin", "http://app.local/reset-password?token=abc"
+        )
+
+        sent = server.send_message.call_args[0][0]
+        assert sent["To"] == "user@example.com"
+        assert sent["Subject"] == "[Locuvera] 가입 승인 안내"
+        body = sent.get_content()
+        assert "20261031" in body
+        assert "관리자" in body
+        assert "http://app.local/reset-password?token=abc" in body
+        assert "72시간" in body
+        assert "비밀번호 찾기" in body
+
+    def test_names_staff_role_in_korean(self, configured_smtp, mock_smtp):
+        _smtp_cls, server = mock_smtp
+        email_utils.send_account_setup_email("user@example.com", "20261031", "staff", "http://app.local/x")
+
+        assert "의료진" in server.send_message.call_args[0][0].get_content()
+
+
 class TestSendFailureIsSwallowed:
     """SMTP 통신 중 예외가 나도 호출부로 전파되지 않는지 검증."""
 

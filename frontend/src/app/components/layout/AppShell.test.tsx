@@ -26,8 +26,8 @@ describe('AppShell brand logo', () => {
     sessionStorage.clear();
   });
 
-  it('links back to the landing page while signed out', () => {
-    expect(renderShell()).toHaveAttribute('href', '/');
+  it('links to the login page while signed out', () => {
+    expect(renderShell()).toHaveAttribute('href', '/login');
   });
 
   it('links an admin to the usage history page', () => {

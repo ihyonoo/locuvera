@@ -48,3 +48,40 @@ describe('App theme sync', () => {
     expect(document.documentElement).toHaveClass('dark');
   });
 });
+
+describe('root path', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('sends signed-out visitors to the login page', async () => {
+    const router = await renderAppAt('/');
+    expect(router.state.location.pathname).toBe('/login');
+  });
+
+  // 백엔드가 Google 로그인 실패를 /#oauth_error=… 로 돌려보낸다 — 로그인 화면이 그 해시를 읽어 오류를 보여준다.
+  it('keeps the hash so the login page can show an OAuth error', async () => {
+    const router = await renderAppAt('/#oauth_error=google_login_failed');
+    expect(router.state.location.pathname).toBe('/login');
+    expect(router.state.location.hash).toBe('#oauth_error=google_login_failed');
+  });
+
+  it('sends a signed-in admin to their home page', async () => {
+    storeAuthSession({
+      token: 'test-token',
+      expires_at: 9999999999,
+      user: { user_id: 1, username: 'admin1', display_name: '관리자', role: 'admin' },
+    });
+    const router = await renderAppAt('/');
+    expect(router.state.location.pathname).toBe('/verification');
+  });
+});

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import AuthSplitLayout from './AuthSplitLayout';
@@ -7,7 +7,6 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/" element={<div>랜딩 화면</div>} />
         <Route
           path="/login"
           element={
@@ -28,10 +27,10 @@ describe('AuthSplitLayout', () => {
     expect(screen.queryByRole('banner')).toBeNull();
   });
 
-  it('shows the logo in the corner as a link to the landing page', () => {
+  it('shows the logo in the corner as a link to the login page', () => {
     renderAt('/login');
     const link = screen.getByRole('link', { name: 'Locuvera' });
-    expect(link).toHaveAttribute('href', '/');
+    expect(link).toHaveAttribute('href', '/login');
     expect(within(link).getByRole('img', { name: 'Locuvera' })).toBeInTheDocument();
   });
 
@@ -59,12 +58,6 @@ describe('AuthSplitLayout', () => {
     }
     expect(container.querySelectorAll('.auth-split__strap')).toHaveLength(2);
     expect(container.querySelector('.auth-split__chip')).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('goes to the landing page when the logo is clicked', () => {
-    renderAt('/login');
-    fireEvent.click(screen.getByRole('link', { name: 'Locuvera' }));
-    expect(screen.getByText('랜딩 화면')).toBeInTheDocument();
   });
 
   it('still renders the title, subtitle and form', () => {

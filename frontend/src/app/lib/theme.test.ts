@@ -122,7 +122,7 @@ describe('normalizePath', () => {
 });
 
 describe('isLightLockedPath', () => {
-  it('lists the landing page and the seven auth pages in route order', () => {
+  it('lists the root redirect and the seven auth pages in route order', () => {
     expect(LIGHT_LOCKED_PATHS).toEqual(LOCKED_PATHS);
   });
 

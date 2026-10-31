@@ -10,6 +10,7 @@ from email.message import EmailMessage
 
 try:
     from backend.settings import (
+        ACCOUNT_SETUP_TTL_SEC,
         SMTP_FROM,
         SMTP_HOST,
         SMTP_PASSWORD,
@@ -20,6 +21,7 @@ except ModuleNotFoundError as exc:
     if not exc.name or not exc.name.startswith("backend"):
         raise
     from settings import (
+        ACCOUNT_SETUP_TTL_SEC,
         SMTP_FROM,
         SMTP_HOST,
         SMTP_PASSWORD,
@@ -80,6 +82,21 @@ def send_reset_email(to: str, link: str) -> None:
         f"{link}\n\n"
         "이 링크는 일정 시간 후 만료됩니다.\n"
         "본인이 요청하지 않았다면 이 메일을 무시하셔도 됩니다."
+    )
+    _send(to, subject, body)
+
+
+def send_account_setup_email(to: str, username: str, role: str, link: str) -> None:
+    subject = "[Locuvera] 가입 승인 안내"
+    role_label = "관리자" if role == "admin" else "의료진"
+    body = (
+        "Locuvera 가입 요청이 승인되었습니다.\n\n"
+        f"사번(로그인 아이디): {username}\n"
+        f"권한: {role_label} — 로그인 화면에서 '{role_label}'을 선택하세요.\n\n"
+        "아래 링크에서 비밀번호를 설정한 뒤 로그인해 주세요.\n\n"
+        f"{link}\n\n"
+        f"이 링크는 {ACCOUNT_SETUP_TTL_SEC // 3600}시간 동안 유효합니다. "
+        "만료되면 로그인 화면의 '비밀번호 찾기'로 새 링크를 받으세요."
     )
     _send(to, subject, body)
 

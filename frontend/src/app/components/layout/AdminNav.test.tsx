@@ -46,6 +46,32 @@ describe('AdminNav', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/admin/nfc-mapping');
   });
 
+  it('has a signup approval tab between device status and my page', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/signup-requests']}>
+        <Routes>
+          <Route
+            path="*"
+            element={
+              <>
+                <AdminNav active="signup-requests" />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const labels = screen.getAllByRole('button').map((button) => button.textContent);
+    expect(labels.indexOf('가입 승인')).toBe(labels.indexOf('기기 상태') + 1);
+    expect(labels.indexOf('마이페이지')).toBe(labels.indexOf('가입 승인') + 1);
+    expect(screen.getByRole('button', { name: '가입 승인' })).toHaveClass('app-nav-tab--active');
+
+    fireEvent.click(screen.getByRole('button', { name: '기기 상태' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/devices');
+  });
+
   describe('on a narrow (mobile) viewport', () => {
     beforeEach(() => setViewportWidth(375));
     afterEach(() => setViewportWidth(1440));

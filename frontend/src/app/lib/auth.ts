@@ -64,7 +64,7 @@ export function getStoredAuthToken(): string | null {
  * 로그인·OAuth 콜백·상단바가 같은 판정을 쓰도록 여기 한 곳에 둔다.
  */
 export function getHomePath(user: AuthUser | null): string {
-  if (!user) return '/';
+  if (!user) return LOGIN_PATH;
   return user.role?.toLowerCase() === 'admin' ? '/verification' : '/equipment';
 }
 
