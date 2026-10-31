@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router';
-import AppShell from '../components/layout/AppShell';
+import { useLocation, useParams } from 'react-router';
+import StaffShell from '../components/layout/StaffShell';
 import { Button } from '../components/ui/button';
 import { buildAuthHeaders, getStoredAuthSession, getStoredAuthUser, withRedirectQuery, LOGIN_PATH } from '../lib/auth';
 import { useAuthGuard, useLogout, useRunWhenReady } from '../lib/useAuthGuard';
@@ -34,7 +34,6 @@ function getAssetStatusLabel(status: string) {
 }
 
 export default function NfcEquipment() {
-  const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
   const token = params.token ?? '';
@@ -153,67 +152,50 @@ export default function NfcEquipment() {
   }
 
   return (
-    <AppShell
-      actions={
-        <>
-          <button type="button" className="app-nav-tab" onClick={() => navigate('/me')}>
-            마이페이지
-          </button>
-          <button type="button" className="app-nav-tab app-nav-tab--logout" onClick={logout}>
-            로그아웃
-          </button>
-        </>
-      }
-      headerAside={
-        <div className="grid w-full grid-cols-3 gap-2 sm:gap-3">
-          <div className="border border-border bg-card p-3 sm:p-4">
-            <div className="metric-label truncate">스캔 토큰</div>
-            <div className="mt-1 truncate text-xs font-semibold leading-5 text-foreground sm:mt-2 sm:text-sm sm:leading-6">
-              {token || '-'}
-            </div>
-          </div>
-          <div className="border border-border bg-card p-3 sm:p-4">
-            <div className="metric-label truncate">장비 상태</div>
-            <div className="mt-1 truncate text-xs font-semibold tracking-[-0.03em] text-foreground sm:mt-2 sm:text-sm sm:text-lg">
-              {item ? getAssetStatusLabel(item.asset_status) : '-'}
-            </div>
-          </div>
-          <div className="border border-border bg-card p-3 sm:p-4">
-            <div className="metric-label truncate">현재 위치</div>
-            <div className="mt-1 truncate text-xs font-semibold tracking-[-0.03em] text-foreground sm:mt-2 sm:text-sm sm:text-lg">
-              {item?.location ?? '미수신'}
-            </div>
-          </div>
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        <section className="surface-panel p-5 fade-rise">
-          <div className="panel-header">
+    <StaffShell menu={currentUser?.role === 'admin' ? 'admin' : 'staff'}>
+      <div className="staff-work staff-work__content staff-work__content--narrow">
+        <header>
+          <p className="staff-note mb-2">NFC 태깅</p>
+          <h1 className="staff-me__name">{item?.equipment_name ?? '장비 정보'}</h1>
+          {item ? <p className="staff-note mt-2">{formatIBeaconTag(item.tag_id)}</p> : null}
+        </header>
+        <section className="staff-panel staff-work__panel" aria-label="장비 정보">
+          <dl className="staff-nfc-facts">
             <div>
-              <div className="panel-title">{item?.equipment_name ?? '장비 정보'}</div>
-              {item ? <p className="panel-copy mt-2">{formatIBeaconTag(item.tag_id)}</p> : null}
+              <dt>장비 상태</dt>
+              <dd>{item ? getAssetStatusLabel(item.asset_status) : '-'}</dd>
             </div>
-          </div>
-
+            <div>
+              <dt>현재 위치</dt>
+              <dd>{item?.location ?? '미수신'}</dd>
+            </div>
+            <div>
+              <dt>스캔 토큰</dt>
+              <dd>{token || '-'}</dd>
+            </div>
+          </dl>
+        </section>
+        <section className="staff-panel staff-work__panel" aria-label="장비 사용">
           {isLoading ? (
-            <div className="rounded-lg border border-dashed border-border/70 px-6 py-12 text-center text-muted-foreground">
-              장비 정보를 불러오는 중입니다.
-            </div>
+            <div className="staff-empty-block">장비 정보를 불러오는 중입니다.</div>
           ) : error ? (
-            <div className="alert alert-error px-5 py-5">{error}</div>
-          ) : !item ? (
-            <div className="rounded-lg border border-dashed border-border/70 px-6 py-12 text-center text-muted-foreground">
-              매핑된 장비를 찾을 수 없습니다.
+            <div className="staff-alert" role="alert">
+              {error}
             </div>
+          ) : !item ? (
+            <div className="staff-empty-block">매핑된 장비를 찾을 수 없습니다.</div>
           ) : (
             <div className="space-y-4">
-              {notice ? <div className="alert alert-success px-5 py-4">{notice}</div> : null}
+              {notice ? (
+                <div className="staff-alert staff-alert--ok" role="status">
+                  {notice}
+                </div>
+              ) : null}
 
-              <section className="border border-border/70 bg-background/80 p-5">
+              <section className="staff-nfc-action">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <div className="text-sm font-medium text-foreground">장비 사용 상태 전환</div>
+                    <div className="staff-panel__title">장비 사용 상태 전환</div>
                     <div className="mt-2 text-sm text-muted-foreground">
                       {item.asset_status === 'available'
                         ? '이 장비는 현재 사용 가능합니다.'
@@ -245,6 +227,6 @@ export default function NfcEquipment() {
           )}
         </section>
       </div>
-    </AppShell>
+    </StaffShell>
   );
 }

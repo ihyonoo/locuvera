@@ -65,7 +65,7 @@ describe('IntegrityVerification on a narrow (mobile) viewport', () => {
 
   it('replaces the boxed sidebar with an 상세검색 toggle that starts closed', async () => {
     renderPage();
-    await screen.findByText('장비 사용 이력');
+    await screen.findByText('의료 장비 사용 이력');
 
     expect(screen.queryByTestId('verification-sidebar')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('이름, 사용자 ID')).not.toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('IntegrityVerification on a narrow (mobile) viewport', () => {
 
   it('reveals the search fields and actions when 상세검색 is opened, and hides them again on a second click', async () => {
     renderPage();
-    await screen.findByText('장비 사용 이력');
+    await screen.findByText('의료 장비 사용 이력');
 
     fireEvent.click(screen.getByRole('button', { name: '상세검색' }));
 
@@ -89,7 +89,7 @@ describe('IntegrityVerification on a narrow (mobile) viewport', () => {
   it('still leaves the usage history results visible without opening 상세검색', async () => {
     renderPage();
 
-    expect(await screen.findByText('장비 사용 이력')).toBeInTheDocument();
+    expect(await screen.findByText('의료 장비 사용 이력')).toBeInTheDocument();
   });
 });
 
@@ -106,7 +106,7 @@ describe('IntegrityVerification on a wide (desktop) viewport', () => {
 
   it('keeps the boxed sidebar and does not render the 상세검색 toggle', async () => {
     renderPage();
-    await screen.findByText('장비 사용 이력');
+    await screen.findByText('의료 장비 사용 이력');
 
     expect(screen.getByTestId('verification-sidebar')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '상세검색' })).not.toBeInTheDocument();

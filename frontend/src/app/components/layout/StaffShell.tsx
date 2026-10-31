@@ -17,7 +17,7 @@ const MENUS: Record<StaffMenu, { key: StaffPageKey; label: string; path: string 
     { key: 'mypage', label: '마이페이지', path: '/me' },
   ],
   admin: [
-    { key: 'verification', label: '장비 사용 이력 조회', path: '/verification' },
+    { key: 'verification', label: '이력 조회', path: '/verification' },
     { key: 'nfc-mapping', label: 'NFC 매핑', path: '/admin/nfc-mapping' },
     { key: 'devices', label: '기기 상태', path: '/admin/devices' },
     { key: 'signup-requests', label: '가입 승인', path: '/admin/signup-requests' },
@@ -25,12 +25,13 @@ const MENUS: Record<StaffMenu, { key: StaffPageKey; label: string; path: string 
   ],
 };
 
-// 640px 미만이면 메뉴를 햄버거로 접는다(AdminNav와 같은 기준)
+// 항목이 많은 관리자 메뉴는 태블릿에서도 접는다
 const WIDE_MENU_QUERY = '(min-width: 640px)';
+const WIDE_ADMIN_MENU_QUERY = '(min-width: 1024px)';
 
 type StaffShellProps = {
   menu: StaffMenu;
-  current: StaffPageKey;
+  current?: StaffPageKey;
   /** 왼쪽에 붙는 사이드바 내용. 없으면 메뉴바 왼쪽 끝에 로고를 둔다. */
   sidebar?: ReactNode;
   sidebarLabel?: string;
@@ -75,7 +76,7 @@ function ThemeToggle() {
 export default function StaffShell({ menu, current, sidebar, sidebarLabel, children }: StaffShellProps) {
   const navigate = useNavigate();
   const logout = useLogout();
-  const wideMenu = useMediaQuery(WIDE_MENU_QUERY);
+  const wideMenu = useMediaQuery(menu === 'admin' ? WIDE_ADMIN_MENU_QUERY : WIDE_MENU_QUERY);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const menuItems = MENUS[menu].map((item) => (

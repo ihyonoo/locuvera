@@ -100,8 +100,8 @@ describe('IntegrityVerification search sidebar', () => {
     renderPage();
 
     await screen.findByTestId('verification-sidebar');
-    expect(screen.getByText('장비 사용 이력')).toBeInTheDocument();
-    expect(within(sidebar()).queryByText('장비 사용 이력')).not.toBeInTheDocument();
+    expect(screen.getByText('의료 장비 사용 이력')).toBeInTheDocument();
+    expect(within(sidebar()).queryByText('의료 장비 사용 이력')).not.toBeInTheDocument();
   });
 
   it('still submits the search from the sidebar', async () => {

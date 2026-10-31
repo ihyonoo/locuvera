@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge } from '../components/ui/badge';
-import AppShell from '../components/layout/AppShell';
-import AdminNav from '../components/layout/AdminNav';
+import StaffShell from '../components/layout/StaffShell';
+import { ToggleSwitch } from '../components/layout/staffControls';
 import ProvenanceDot from '../components/ui/ProvenanceDot';
 import { formatIBeaconTag } from '../lib/iBeaconTag';
 import { API_BASE_URL } from '../lib/runtime';
@@ -27,7 +26,7 @@ type LiveTagItem = {
 };
 
 function dotClass(isOnline: boolean) {
-  return isOnline ? 'h-2.5 w-2.5 rounded-full dot-ok' : 'h-2.5 w-2.5 rounded-full dot-warn';
+  return isOnline ? 'staff-led' : 'staff-led staff-led--off';
 }
 
 function formatSeen(epoch: number | null) {
@@ -116,113 +115,99 @@ export default function DeviceStatus() {
   if (!isAuthorized) return null;
 
   return (
-    <AppShell wide actions={<AdminNav active="devices" />} contentClassName="pt-6 sm:pt-5">
-      <div className="space-y-4">
-        <section className="surface-panel p-5 fade-rise">
-          <div className="panel-header">
+    <StaffShell menu="admin" current="devices">
+      <div className="staff-work staff-work__content">
+        <header className="staff-work__heading">
+          <div>
+            <h1 className="staff-title">기기 상태</h1>
+            <p className="staff-note mt-2">리더 연결과 태그 수신 상태 · 3초마다 갱신</p>
+          </div>
+          <ToggleSwitch checked={hideSimulated} onChange={setHideSimulated}>
+            시뮬레이션 데이터 숨기기
+          </ToggleSwitch>
+        </header>
+        {error ? (
+          <div className="staff-alert" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <div className="staff-device-summary">
+          <section className="staff-panel staff-device-metric">
+            <h2 className="staff-note">리더 온라인</h2>
             <div>
-              <div className="panel-title">기기 상태</div>
+              <strong>{`${readersOnline} / ${readersTotal}`}</strong>
             </div>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={hideSimulated}
-                onChange={(event) => setHideSimulated(event.target.checked)}
-              />
-              시뮬레이션 데이터 숨기기
-            </label>
-          </div>
-          {error ? <div className="alert alert-error mb-3">{error}</div> : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-border bg-card p-5">
-              <div className="metric-label">리더 온라인</div>
-              <div className="mt-2 text-2xl font-semibold tracking-[-0.04em]">
-                {readersOnline} / {readersTotal}
-              </div>
+          </section>
+          <section className="staff-panel staff-device-metric">
+            <h2 className="staff-note">태그 감지</h2>
+            <div>
+              <strong>{`${tagsOnline} / ${tagsTotal}`}</strong>
             </div>
-            <div className="rounded-lg border border-border bg-card p-5">
-              <div className="metric-label">태그 감지</div>
-              <div className="mt-2 text-2xl font-semibold tracking-[-0.04em]">
-                {tagsOnline} / {tagsTotal}
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section className="surface-panel p-5 fade-rise">
-          <div className="panel-header">
-            <div>
-              <div className="panel-title">리더</div>
+        <div className="staff-device-grid">
+          <section className="staff-panel staff-work__panel">
+            <div className="staff-panel__head">
+              <h2 className="staff-panel__title">리더</h2>
+              <span className="staff-note">{readersTotal}대</span>
             </div>
-            <Badge variant="outline">{readersTotal}대</Badge>
-          </div>
-          <div className="space-y-2">
             {readersTotal === 0 ? (
-              <div className="empty-state">등록된 리더가 없습니다.</div>
+              <div className="staff-empty-block">등록된 리더가 없습니다.</div>
             ) : (
               visibleReaders.map((r) => (
-                <div
-                  key={r.reader_id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
-                >
+                <div key={r.reader_id} className="staff-device-row">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 font-medium text-foreground">
+                    <div className="flex items-center gap-1.5 font-semibold">
                       {r.location}
                       <ProvenanceDot isRealHardware={r.is_real_hardware ?? true} />
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{r.reader_id}</div>
+                    <div className="staff-note mt-1">{r.reader_id}</div>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <div className="flex items-center justify-end gap-2">
+                  <div className="staff-device-row__state">
+                    <div className="staff-status">
                       <span className={dotClass(r.is_online)} />
                       {r.is_online ? '온라인' : '오프라인'}
                     </div>
-                    <div className="mt-1">마지막 수신: {formatSeen(r.last_seen)}</div>
+                    <div className="staff-note mt-1">마지막 수신: {formatSeen(r.last_seen)}</div>
                   </div>
                 </div>
               ))
             )}
-          </div>
-        </section>
+          </section>
 
-        <section className="surface-panel p-5 fade-rise">
-          <div className="panel-header">
-            <div>
-              <div className="panel-title">태그</div>
+          <section className="staff-panel staff-work__panel">
+            <div className="staff-panel__head">
+              <h2 className="staff-panel__title">태그</h2>
+              <span className="staff-note">{tagsTotal}개</span>
             </div>
-            <Badge variant="outline">{tagsTotal}개</Badge>
-          </div>
-          <div className="space-y-2">
             {tagsTotal === 0 ? (
-              <div className="empty-state">등록된 태그가 없습니다.</div>
+              <div className="staff-empty-block">등록된 태그가 없습니다.</div>
             ) : (
               sortedTags.map((t) => (
-                <div
-                  key={t.tag_id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
-                >
+                <div key={t.tag_id} className="staff-device-row">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 truncate font-medium text-foreground">
+                    <div className="flex items-center gap-1.5 font-semibold">
                       {t.equipment_name?.trim() || t.tag_id}
                       <ProvenanceDot isRealHardware={t.is_real_hardware ?? true} />
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground" title={t.tag_id}>
+                    <div className="staff-note mt-1" title={t.tag_id}>
                       {formatIBeaconTag(t.tag_id)} · {t.location ?? '감지 안 됨'}
                     </div>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <div className="flex items-center justify-end gap-2">
+                  <div className="staff-device-row__state">
+                    <div className="staff-status">
                       <span className={dotClass(t.is_online)} />
                       {t.is_online ? '감지 중' : '감지 안 됨'}
                     </div>
-                    <div className="mt-1">마지막 수신: {formatSeen(t.last_seen)}</div>
+                    <div className="staff-note mt-1">마지막 수신: {formatSeen(t.last_seen)}</div>
                   </div>
                 </div>
               ))
             )}
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
-    </AppShell>
+    </StaffShell>
   );
 }

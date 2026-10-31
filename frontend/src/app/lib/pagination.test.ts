@@ -62,10 +62,10 @@ describe('buildPageList', () => {
 
 describe('PAGE_SIZE_OPTIONS', () => {
   it('offers the sizes the admin lists use', () => {
-    expect(PAGE_SIZE_OPTIONS).toEqual([10, 20, 50, 100]);
+    expect(PAGE_SIZE_OPTIONS).toEqual([5, 10, 20, 50, 100]);
   });
 
-  it('starts at the smallest size so the first screen stays short', () => {
+  it('starts at ten items per page', () => {
     expect(DEFAULT_PAGE_SIZE).toBe(10);
   });
 });

@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import AppShell from '../components/layout/AppShell';
-import AdminNav from '../components/layout/AdminNav';
-import { Badge } from '../components/ui/badge';
+import StaffShell from '../components/layout/StaffShell';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -102,13 +100,13 @@ function ApproveDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
   return (
     // 저장 중에 닫으면 결과가 사라지고, 늦게 온 응답이 다른 요청의 대화상자를 닫는다.
     <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="staff-tokens staff-work staff-work-dialog max-w-md">
         <DialogHeader>
           <DialogTitle>가입 승인</DialogTitle>
           <DialogDescription>{requestSummary(item)}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-5">
-          <div className="alert alert-warn">
+          <div className="staff-alert">
             사번·이름·이메일이 같은 직원의 것인지 확인한 뒤 승인하세요. 승인하면 이 이메일로 비밀번호 설정 링크가
             갑니다.
           </div>
@@ -158,7 +156,7 @@ function ApproveDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
                   <SelectTrigger>
                     <SelectValue placeholder="직책 선택" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="staff-tokens staff-work">
                     {POSITION_OPTIONS.map((option) => (
                       <SelectItem key={option} value={option}>
                         {option}
@@ -170,7 +168,7 @@ function ApproveDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
             </>
           ) : null}
 
-          {error ? <div className="alert alert-error">{error}</div> : null}
+          {error ? <div className="staff-alert">{error}</div> : null}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
@@ -211,14 +209,14 @@ function RejectDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
   return (
     // 저장 중에 닫으면 결과가 사라지고, 늦게 온 응답이 다른 요청의 대화상자를 닫는다.
     <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="staff-tokens staff-work staff-work-dialog max-w-md">
         <DialogHeader>
           <DialogTitle>가입 요청 거절</DialogTitle>
           <DialogDescription>{requestSummary(item)}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-5">
           <p className="text-sm text-muted-foreground">요청을 지웁니다. 요청자에게는 알리지 않습니다.</p>
-          {error ? <div className="alert alert-error">{error}</div> : null}
+          {error ? <div className="staff-alert">{error}</div> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               취소
@@ -277,44 +275,49 @@ export default function SignupRequests() {
   if (!isAuthorized) return null;
 
   return (
-    <AppShell wide actions={<AdminNav active="signup-requests" />} contentClassName="pt-6 sm:pt-5">
-      <section className="surface-panel p-5 fade-rise">
-        <div className="panel-header">
+    <StaffShell menu="admin" current="signup-requests">
+      <div className="staff-work staff-work__content staff-work__content--narrow">
+        <header className="staff-work__heading">
           <div>
-            <div className="panel-title">가입 승인</div>
+            <h1 className="staff-title">가입 승인</h1>
+            <p className="staff-note mt-2">직원 정보를 확인하고 계정 권한을 승인하세요.</p>
           </div>
-          <Badge variant="outline">{items.length}건</Badge>
-        </div>
-        {error ? <div className="alert alert-error mb-3">{error}</div> : null}
-        {notice ? <div className="alert alert-success mb-3">{notice}</div> : null}
-        {isLoaded && items.length === 0 ? <div className="empty-state">대기 중인 가입 요청이 없습니다.</div> : null}
-        <ul className="space-y-2">
-          {items.map((item) => (
-            <li
-              key={item.request_id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
-            >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-foreground">
-                  <span>{item.display_name}</span>
-                  <span className="text-sm text-muted-foreground">{item.employee_no}</span>
+          <span className="staff-status">
+            <span className="staff-led staff-led--live" />
+            대기 {items.length}건
+          </span>
+        </header>
+        <section className="staff-panel staff-work__panel">
+          {error ? <div className="staff-alert mb-3">{error}</div> : null}
+          {notice ? <div className="staff-alert staff-alert--ok mb-3">{notice}</div> : null}
+          {isLoaded && items.length === 0 ? (
+            <div className="staff-empty-block">대기 중인 가입 요청이 없습니다.</div>
+          ) : null}
+          <ul>
+            {items.map((item) => (
+              <li key={item.request_id} className="staff-request-row">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 font-medium text-foreground">
+                    <span>{item.display_name}</span>
+                    <span className="text-sm text-muted-foreground">{item.employee_no}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    <span>{item.email}</span> · 요청 {formatRequestedAt(item.created_at)}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  <span>{item.email}</span> · 요청 {formatRequestedAt(item.created_at)}
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" onClick={() => setApproving(item)}>
+                    승인
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setRejecting(item)}>
+                    거절
+                  </Button>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" onClick={() => setApproving(item)}>
-                  승인
-                </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setRejecting(item)}>
-                  거절
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
 
       {approving ? (
         <ApproveDialog
@@ -340,6 +343,6 @@ export default function SignupRequests() {
           }}
         />
       ) : null}
-    </AppShell>
+    </StaffShell>
   );
 }

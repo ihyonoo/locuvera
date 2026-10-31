@@ -62,7 +62,7 @@ describe('StaffShell menu bar', () => {
       '/me',
     );
     const nav = screen.getByRole('navigation', { name: '메뉴' });
-    for (const label of ['장비 사용 이력 조회', 'NFC 매핑', '기기 상태', '가입 승인', '마이페이지']) {
+    for (const label of ['이력 조회', 'NFC 매핑', '기기 상태', '가입 승인', '마이페이지']) {
       expect(within(nav).getByRole('button', { name: label })).toBeInTheDocument();
     }
     expect(within(nav).getByRole('button', { name: '마이페이지' })).toHaveAttribute('aria-current', 'page');
@@ -140,5 +140,18 @@ describe('StaffShell menu bar', () => {
     fireEvent.click(screen.getByRole('button', { name: '메뉴 열기' }));
     fireEvent.click(screen.getByRole('button', { name: '마이페이지' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/me');
+  });
+
+  it('folds the longer admin menu on tablets so labels stay readable', () => {
+    setViewportWidth(768);
+    renderShell(
+      <StaffShell menu="admin" current="devices">
+        본문
+      </StaffShell>,
+      '/admin/devices',
+    );
+    expect(screen.queryByRole('navigation', { name: '메뉴' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '메뉴 열기' }));
+    expect(screen.getByRole('button', { name: '기기 상태' })).toHaveAttribute('aria-current', 'page');
   });
 });

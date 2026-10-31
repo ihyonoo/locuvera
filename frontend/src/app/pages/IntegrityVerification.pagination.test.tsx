@@ -105,6 +105,7 @@ describe('IntegrityVerification server-side pagination', () => {
     expect(firstRequest).toContain('limit=10');
     expect(firstRequest).toContain('offset=0');
     expect(visibleEquipmentNames()).toHaveLength(10);
+    expect(screen.getByRole('combobox', { name: '페이지당 개수' })).toHaveTextContent('10개씩');
   });
 
   it('counts pages from the server total, not from the rows on screen', async () => {
