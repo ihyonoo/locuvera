@@ -19,7 +19,11 @@ export const LIGHT_LOCKED_PATHS: readonly string[] = [
 // 휴대폰 브라우저 주소창 색 — 앱 상단바 배경(--app-nav-background)과 같다
 export const THEME_COLOR: Record<Theme, string> = { light: '#f1f1f1', dark: '#1a1b1e' };
 
+// 저장소 쓰기가 막힌 브라우저(사생활 보호 모드 등)에서 고른 값 — 이 탭에서만 쓰고 새로고침하면 사라진다
+let unsavedTheme: Theme | null = null;
+
 export function getStoredTheme(): Theme {
+  if (unsavedTheme) return unsavedTheme;
   try {
     return localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
   } catch {
@@ -30,8 +34,9 @@ export function getStoredTheme(): Theme {
 export function storeTheme(theme: Theme): void {
   try {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
+    unsavedTheme = null;
   } catch {
-    // 저장소가 막힌 브라우저에서는 이 탭에서만 적용된다
+    unsavedTheme = theme;
   }
 }
 

@@ -48,7 +48,19 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
+
+// 이 환경의 localStorage는 Storage.prototype을 쓰지 않아 prototype 목이 걸리지 않는다 — 전역을 통째로 바꾼다
+function blockStorage(blocked: 'read' | 'write') {
+  const fail = () => {
+    throw new Error('blocked');
+  };
+  vi.stubGlobal('localStorage', {
+    getItem: blocked === 'read' ? fail : () => null,
+    setItem: blocked === 'write' ? fail : () => {},
+  });
+}
 
 describe('getStoredTheme', () => {
   it('is light when nothing is stored', () => {
@@ -66,9 +78,7 @@ describe('getStoredTheme', () => {
   });
 
   it('falls back to light when storage cannot be read', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('blocked');
-    });
+    blockStorage('read');
     expect(getStoredTheme()).toBe('light');
   });
 });
@@ -80,10 +90,22 @@ describe('storeTheme', () => {
   });
 
   it('ignores storage write failures', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('blocked');
-    });
+    blockStorage('write');
     expect(() => storeTheme('dark')).not.toThrow();
+    // 탭 안에 기억한 값을 다음 테스트에 남기지 않는다
+    vi.unstubAllGlobals();
+    storeTheme('light');
+  });
+
+  it('still applies the chosen theme in this tab when storage cannot be written', () => {
+    blockStorage('write');
+    storeTheme('dark');
+    expect(getStoredTheme()).toBe('dark');
+    syncThemeForPath('/me');
+    expect(isDarkThemeActive()).toBe(true);
+    // 탭 안에 기억한 값을 다음 테스트에 남기지 않는다
+    vi.unstubAllGlobals();
+    storeTheme('light');
   });
 });
 
