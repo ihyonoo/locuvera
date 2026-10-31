@@ -5,10 +5,12 @@ import IntegrityVerification from './IntegrityVerification';
 import NfcMapping from './NfcMapping';
 import DeviceStatus from './DeviceStatus';
 import SignupRequests from './SignupRequests';
+import EquipmentUtilization from './EquipmentUtilization';
 import NfcEquipment from './NfcEquipment';
 
 const ADMIN_PAGES = [
   { Page: IntegrityVerification, path: '/verification', label: '이력 조회' },
+  { Page: EquipmentUtilization, path: '/admin/utilization', label: '가동률 분석' },
   { Page: NfcMapping, path: '/admin/nfc-mapping', label: 'NFC 매핑' },
   { Page: DeviceStatus, path: '/admin/devices', label: '기기 상태' },
   { Page: SignupRequests, path: '/admin/signup-requests', label: '가입 승인' },

@@ -62,9 +62,10 @@ describe('StaffShell menu bar', () => {
       '/me',
     );
     const nav = screen.getByRole('navigation', { name: '메뉴' });
-    for (const label of ['이력 조회', 'NFC 매핑', '기기 상태', '가입 승인', '마이페이지']) {
-      expect(within(nav).getByRole('button', { name: label })).toBeInTheDocument();
-    }
+    const labels = within(nav)
+      .getAllByRole('button')
+      .map((button) => button.textContent);
+    expect(labels).toEqual(['이력 조회', '가동률 분석', 'NFC 매핑', '기기 상태', '가입 승인', '마이페이지']);
     expect(within(nav).getByRole('button', { name: '마이페이지' })).toHaveAttribute('aria-current', 'page');
     expect(within(nav).queryByRole('button', { name: '장비 검색' })).not.toBeInTheDocument();
   });
