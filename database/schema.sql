@@ -190,6 +190,15 @@ CREATE TABLE IF NOT EXISTS auth_action_tokens (
 CREATE INDEX IF NOT EXISTS idx_auth_action_tokens_hash
     ON auth_action_tokens (token_hash);
 
+-- 공개 가입 요청. 계정은 관리자가 승인할 때 users에 만들고, 승인·거절하면 요청 행을 지운다.
+CREATE TABLE IF NOT EXISTS signup_requests (
+    request_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    employee_no TEXT NOT NULL UNIQUE,  -- 사번(숫자 8자리), 승인되면 users.username
+    display_name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS email TEXT,

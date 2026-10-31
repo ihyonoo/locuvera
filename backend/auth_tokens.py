@@ -31,27 +31,32 @@ def create_action_token(
     ttl_sec: int,
     user_id: int | None = None,
     payload: dict | None = None,
+    cursor=None,
 ) -> str:
-    """랜덤 원문 토큰을 생성해 해시를 저장하고, 원문을 반환한다."""
+    """랜덤 원문 토큰을 생성해 해시를 저장하고, 원문을 반환한다.
+
+    cursor를 주면 호출자의 트랜잭션 안에서 저장한다(커밋 전 계정을 참조할 때).
+    """
+    if cursor is None:
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            return create_action_token(purpose=purpose, ttl_sec=ttl_sec, user_id=user_id, payload=payload, cursor=cur)
+
     raw_token = secrets.token_urlsafe(32)
     token_hash = _hash_token(raw_token)
     expires_at = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=ttl_sec)
-
-    sql = """
-    INSERT INTO auth_action_tokens (user_id, purpose, token_hash, payload, expires_at)
-    VALUES (%s, %s, %s, %s, %s)
-    """
-    with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
-        cur.execute(
-            sql,
-            (
-                user_id,
-                purpose,
-                token_hash,
-                Jsonb(payload) if payload is not None else None,
-                expires_at,
-            ),
-        )
+    cursor.execute(
+        """
+        INSERT INTO auth_action_tokens (user_id, purpose, token_hash, payload, expires_at)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (
+            user_id,
+            purpose,
+            token_hash,
+            Jsonb(payload) if payload is not None else None,
+            expires_at,
+        ),
+    )
     return raw_token
 
 

@@ -140,6 +140,21 @@ describe('auth card', () => {
     expect(ratio(parseColor(card[fg]), surface)).toBeGreaterThanOrEqual(minimum);
   });
 
+  // 성공·오류 안내도 납작한 색 상자 대신 입력칸처럼 카드에 파인 홈으로 그린다
+  it('draws notices as a groove in the card, not as a flat colored box', () => {
+    const notice = block(/\n\.auth-split \.alert\s*\{/);
+    expect(notice).toMatch(/border:\s*none/);
+    expect(notice).toMatch(/background:\s*var\(--auth-bg\)/);
+    expect(notice).toMatch(/box-shadow:\s*inset/);
+    // 한국어는 낱말 중간에서 줄을 바꾸지 않고, 긴 이메일만 필요할 때 끊는다
+    expect(notice).toMatch(/word-break:\s*keep-all/);
+    expect(notice).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
+  it('keeps error notices readable on the card', () => {
+    expect(ratio(parseColor(card['--err-fg']), surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('keeps short cards (find ID, forgot password …) at the login card size with the form centered', () => {
     const card = block(/\n\s*\.auth-split__card\s*\{/);
     expect(card).toMatch(/min-height:\s*37rem/);

@@ -24,15 +24,16 @@ class DemoLoginRequest(BaseModel):
     role: str = "staff"
 
 
-class RegisterRequest(BaseModel):
-    username: str
+class SignupRequestCreate(BaseModel):
+    employee_no: str
     display_name: str
-    password: str
     email: str
-    position: str | None = None
+
+
+class SignupApproveRequest(BaseModel):
     role: str = "staff"
     department: str | None = None
-    is_active: bool = True
+    position: str | None = None
 
 
 class VerifyEmailRequest(BaseModel):

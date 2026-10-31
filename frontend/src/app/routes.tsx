@@ -1,5 +1,5 @@
 import { createBrowserRouter } from 'react-router';
-import Landing from './pages/Landing';
+import RootRedirect from './pages/RootRedirect';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import SignUpComplete from './pages/SignUpComplete';
@@ -14,11 +14,12 @@ import IntegrityVerification from './pages/IntegrityVerification';
 import NfcMapping from './pages/NfcMapping';
 import NfcEquipment from './pages/NfcEquipment';
 import DeviceStatus from './pages/DeviceStatus';
+import SignupRequests from './pages/SignupRequests';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    Component: Landing,
+    Component: RootRedirect,
   },
   {
     path: '/login',
@@ -71,6 +72,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin/nfc-mapping',
     Component: NfcMapping,
+  },
+  {
+    path: '/admin/signup-requests',
+    Component: SignupRequests,
   },
   {
     path: '/nfc/:token',

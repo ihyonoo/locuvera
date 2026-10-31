@@ -68,7 +68,7 @@ describe('Login role picker', () => {
     expect(roleOption('관리자')).toBeChecked();
     expect(roleOption('의료진')).not.toBeChecked();
 
-    fireEvent.change(screen.getByLabelText('아이디'), { target: { value: 'a@b.com' } });
+    fireEvent.change(screen.getByLabelText('사번'), { target: { value: '20261031' } });
     fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'pw' } });
     fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 
@@ -164,10 +164,10 @@ describe('Login fields', () => {
     expect(document.querySelector('.auth-split__subtitle')).toBeNull();
   });
 
-  it('shows Username/Password inside the boxes and keeps the labels only for screen readers', () => {
+  it('shows Employee ID/Password inside the boxes and keeps the labels only for screen readers', () => {
     renderLogin();
     for (const [name, placeholder] of [
-      ['아이디', 'Username'],
+      ['사번', 'Employee ID'],
       ['비밀번호', 'Password'],
     ]) {
       const input = screen.getByLabelText(name);

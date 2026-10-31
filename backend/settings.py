@@ -47,6 +47,7 @@ APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "http://localhost:5173").rstrip("/"
 # 이메일 기반 액션 토큰(인증/재설정/OAuth handoff) 유효 시간.
 EMAIL_VERIFY_TTL_SEC = max(300, int(os.getenv("EMAIL_VERIFY_TTL_SEC", "86400")))  # 기본 24h
 PASSWORD_RESET_TTL_SEC = max(300, int(os.getenv("PASSWORD_RESET_TTL_SEC", "3600")))  # 기본 1h
+ACCOUNT_SETUP_TTL_SEC = max(3600, int(os.getenv("ACCOUNT_SETUP_TTL_SEC", "259200")))  # 가입 승인 메일, 기본 72h
 OAUTH_STATE_TTL_SEC = max(60, int(os.getenv("OAUTH_STATE_TTL_SEC", "600")))  # 기본 10m
 OAUTH_HANDOFF_TTL_SEC = max(30, int(os.getenv("OAUTH_HANDOFF_TTL_SEC", "120")))  # 기본 2m
 OAUTH_PENDING_TTL_SEC = max(300, int(os.getenv("OAUTH_PENDING_TTL_SEC", "1800")))  # 기본 30m

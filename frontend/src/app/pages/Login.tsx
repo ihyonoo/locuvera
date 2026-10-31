@@ -165,12 +165,12 @@ export default function Login() {
         {/* 입력칸 안에 항목 이름을 두고, 라벨은 화면 낭독기용으로만 남긴다. */}
         <div className="space-y-2">
           <Label htmlFor="email" className="sr-only">
-            아이디
+            사번
           </Label>
           <Input
             id="email"
             type="text"
-            placeholder="Username"
+            placeholder="Employee ID"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

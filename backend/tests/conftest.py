@@ -49,6 +49,7 @@ TABLES_TO_TRUNCATE = [
     "user_oauth_identities",
     "tags",
     "readers",
+    "signup_requests",
     "users",
 ]
 
