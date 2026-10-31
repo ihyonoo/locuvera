@@ -27,15 +27,65 @@ const STATUS: Record<string, Status> = {
   available: { className: 'map-marker-ok', label: '사용 가능', color: PIN_COLORS.available },
 };
 const statusOf = (status?: string) => STATUS[status ?? 'available'] ?? STATUS.available;
-// 흰 테두리 구는 구슬의 이 배수 — 14px 구슬에서 테두리 약 1.75px로 2D 흰 테두리(1.5px)와 비슷하다
-const RIM_SCALE = 1.25;
-// 흰 테두리 입력색(선형). 톤 매핑을 거치면 #fdfdfd가 된다
-const RIM_INPUT = 8;
 // 구슬 중심은 바닥에서 반지름의 이 배수만큼 띄우고, 바로 아래 바닥에 반지름의 이 배수만 한 그림자를 깐다
 const BALL_LIFT = 1.8;
 const SHADOW_SCALE = 1.25;
 // 그림자는 바닥에 새긴 구역 이름(0.65) 위에 깐다
 const SHADOW_LIFT = 0.2;
+
+// 광택 구슬: 음영 matcap을 곱한다 — 화면 가운데 근처 밝기가 이 값일 때 지정 색이 나오도록 색을 나눠 둔다
+const GLOSS_MID = 0.85;
+
+// 광택 구슬 matcap: 왼쪽 위에 빛이 맺히고 가장자리로 갈수록 어두운 회색조(값을 선형 그대로 곱한다)
+function glossTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(size * 0.38, size * 0.32, 0, size * 0.5, size * 0.5, size * 0.62);
+  for (const [at, v] of [
+    [0, 1],
+    [0.12, 0.97],
+    [0.45, 0.86],
+    [0.8, 0.66],
+    [1, 0.5],
+  ]) {
+    const c = Math.round(v * 255);
+    gradient.addColorStop(at, `rgb(${c},${c},${c})`);
+  }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+
+// 광택 구슬 반사광 — 시점 기준 왼쪽 위에서 오는 빛이 넓고 은은하게 맺힌다(하얗게 날아가지 않을 만큼만 더한다)
+const GLOSS_LIGHT = new THREE.Vector3(-0.4, 0.5, 0.77).normalize();
+const GLOSS_SHININESS = 16;
+const GLOSS_STRENGTH = 0.8;
+
+function addSpecular(material: THREE.MeshMatcapMaterial) {
+  const [x, y, z] = GLOSS_LIGHT.toArray().map((v) => v.toFixed(4));
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `outgoingLight += pow(max(dot(normal, vec3(${x}, ${y}, ${z})), 0.0), ${GLOSS_SHININESS.toFixed(1)}) * ${GLOSS_STRENGTH.toFixed(1)};
+#include <opaque_fragment>`,
+    );
+  };
+  return material;
+}
+
+// 장비 구슬 재질 — 음영과 은은한 반사광으로 유리구슬처럼 보인다(흰 테두리 없음)
+function ballMaterials() {
+  const matcap = glossTexture();
+  return new Map<Status, THREE.MeshMatcapMaterial>(
+    Object.values(STATUS).map((s) => {
+      const [r, g, b] = acesFilmicInverse(s.color);
+      const color = new THREE.Color().setRGB(r / GLOSS_MID, g / GLOSS_MID, b / GLOSS_MID, THREE.LinearSRGBColorSpace);
+      return [s, addSpecular(new THREE.MeshMatcapMaterial({ matcap, color }))];
+    }),
+  );
+}
 
 // 구슬 아래 그림자: 가장자리로 갈수록 흐려지는 원
 function shadowTexture() {
@@ -77,11 +127,9 @@ type Overlay = {
   dot: HTMLButtonElement;
   tag: HTMLDivElement;
   ball: THREE.Mesh;
-  rim: THREE.Mesh;
   shadow: THREE.Mesh;
   equipment: PlacedEquipment;
-  // 고른 장비일 때만: 구슬 위 흰 테두리와 퍼지는 고리(DOM)
-  focusRim?: HTMLSpanElement;
+  // 고른 장비일 때만: 구슬 둘레에 퍼지는 고리(DOM)
   focusRing?: HTMLSpanElement;
 };
 
@@ -101,22 +149,11 @@ export class MapEngine {
   private readonly quality = createQualityGovernor();
   private floorGroup: THREE.Group | null = null;
   private marker: THREE.Group | null = null;
-  // 장비 구슬·흰 테두리·그림자. geometry·material은 모든 장비가 나눠 쓴다
+  // 장비 구슬·그림자. geometry·material은 모든 장비가 나눠 쓴다
   // 구슬은 조명을 받지 않고, 마지막 톤 매핑을 거친 뒤 지정 색이 나오도록 역보정한 색을 쓴다
   private readonly balls = new THREE.Group();
   private readonly ballGeometry = new THREE.SphereGeometry(1, 32, 16);
-  private readonly ballMaterials = new Map(
-    Object.values(STATUS).map((s) => [
-      s,
-      new THREE.MeshBasicMaterial({
-        color: new THREE.Color().setRGB(...acesFilmicInverse(s.color), THREE.LinearSRGBColorSpace),
-      }),
-    ]),
-  );
-  private readonly rimMaterial = new THREE.MeshBasicMaterial({
-    color: new THREE.Color().setRGB(RIM_INPUT, RIM_INPUT, RIM_INPUT, THREE.LinearSRGBColorSpace),
-    side: THREE.BackSide,
-  });
+  private readonly ballMaterials: ReturnType<typeof ballMaterials>;
   private readonly shadowGeometry = new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2);
   private readonly shadowMaterial = new THREE.MeshBasicMaterial({
     map: shadowTexture(),
@@ -144,6 +181,7 @@ export class MapEngine {
     private readonly options: { dark: boolean },
   ) {
     this.stage = options.dark ? STAGE_DARK : STAGE_LIGHT;
+    this.ballMaterials = ballMaterials();
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.onContextLost = (event: Event) => {
       event.preventDefault();
@@ -252,18 +290,17 @@ export class MapEngine {
       this.layer.append(dot, tag);
       const ball = new THREE.Mesh(this.ballGeometry, this.ballMaterials.get(statusOf(e.assetStatus)));
       ball.position.copy(e.position);
-      const rim = new THREE.Mesh(this.ballGeometry, this.rimMaterial);
       const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterial);
       shadow.position.copy(e.position).setY(e.position.y + SHADOW_LIFT);
-      this.balls.add(ball, rim, shadow);
-      const o: Overlay = { dot, tag, ball, rim, shadow, equipment: e };
+      this.balls.add(ball, shadow);
+      const o: Overlay = { dot, tag, ball, shadow, equipment: e };
       this.styleOverlay(o);
       return o;
     });
     this.requestRender();
   }
 
-  // 목록에서 고른 장비, 또는 지도에서 누른 장비: 구슬은 2D 점처럼 키우고 흰 테두리와 고리를 띄우며, 이름표는 바탕·글씨를 뒤집고 상태를 붙인다
+  // 목록에서 고른 장비, 또는 지도에서 누른 장비: 구슬은 2D 점처럼 키우고 고리를 띄우며, 이름표는 바탕·글씨를 뒤집고 상태를 붙인다
   setFocus(tagId: string | null) {
     this.focusTagId = tagId;
     for (const o of this.overlays) this.styleOverlay(o);
@@ -356,7 +393,6 @@ export class MapEngine {
     this.ground.material.dispose();
     this.ballGeometry.dispose();
     for (const m of this.ballMaterials.values()) m.dispose();
-    this.rimMaterial.dispose();
     this.shadowGeometry.dispose();
     this.shadowMaterial.map?.dispose();
     this.shadowMaterial.dispose();
@@ -407,8 +443,8 @@ export class MapEngine {
     }
   }
 
-  // 구슬은 장면에 그리고, 이 단추는 구슬 위의 보이지 않는 누르는 영역이다. 고른 장비만 2D처럼 흰 테두리와 퍼지는 고리를 덧그린다.
-  // 크기(누르는 영역·테두리·고리)는 구슬 화면 지름을 따라 매 프레임 updateOverlays가 정한다
+  // 구슬은 장면에 그리고, 이 단추는 구슬 위의 보이지 않는 누르는 영역이다. 고른 장비만 퍼지는 고리를 덧그린다.
+  // 크기(누르는 영역·고리)는 구슬 화면 지름을 따라 매 프레임 updateOverlays가 정한다
   private styleOverlay(o: Overlay) {
     const { dot, tag, equipment: e } = o;
     const focused = e.tag_id === this.focusTagId;
@@ -417,14 +453,11 @@ export class MapEngine {
     if (focused) {
       const ring = document.createElement('span');
       ring.className = `pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full opacity-70 ${status.className}`;
-      const rim = document.createElement('span');
-      rim.className = 'relative block rounded-full map-marker-spotlight';
-      dot.replaceChildren(ring, rim);
+      dot.replaceChildren(ring);
       o.focusRing = ring;
-      o.focusRim = rim;
     } else {
       dot.replaceChildren();
-      o.focusRing = o.focusRim = undefined;
+      o.focusRing = undefined;
     }
     tag.style.cssText = TAG_STYLE;
     Object.assign(tag.style, tagColors(e.assetStatus, focused, this.options.dark), {
@@ -445,8 +478,6 @@ export class MapEngine {
       const r = this.ballDiameter(o) / 2;
       o.ball.scale.setScalar(r);
       o.ball.position.y = o.equipment.position.y + r * BALL_LIFT;
-      o.rim.scale.setScalar(r * RIM_SCALE);
-      o.rim.position.copy(o.ball.position);
       o.shadow.scale.setScalar(r * SHADOW_SCALE);
     }
   }
@@ -473,9 +504,8 @@ export class MapEngine {
         width: `${hit}px`,
         height: `${hit}px`,
       });
-      if (o.focusRim && o.focusRing) {
+      if (o.focusRing) {
         const ring = pinScreenDiameter(this.pinWorld * PIN_SIZE_RATIO.ring, wpp);
-        Object.assign(o.focusRim.style, { width: `${diameter}px`, height: `${diameter}px` });
         Object.assign(o.focusRing.style, { width: `${ring}px`, height: `${ring}px` });
       }
       const labelled = onScreen && (this.showLabels || o.equipment.tag_id === this.focusTagId);

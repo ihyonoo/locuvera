@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FloorMapViewProps } from '../FloorMapView';
 import { FLOOR_PLANS, zonePolygonsPx } from '../../lib/floor3d/floorPlans';
-import { MAP_3D_ASPECT } from '../../lib/mapDimension';
 import { isDarkThemeActive } from '../../lib/theme';
 import { equipmentLayerKey } from '../../lib/floor3d/runtime';
 import { buildFloorModel, highlightPosition, placeEquipmentOnFloor, type ZonePx } from './buildFloor';
@@ -119,15 +118,16 @@ export default function FloorMap3D({
     <div
       ref={hostRef}
       data-testid="floor-map-3d"
-      className="relative w-full select-none overflow-hidden rounded-lg border border-border bg-[var(--map3d-stage)]"
-      style={{ aspectRatio: MAP_3D_ASPECT, touchAction: 'none' }}
+      // 크기는 놓인 상자(장비 검색의 지도 받침)가 정한다 — 엔진이 상자 비율에 맞춰 층 전체를 맞춘다
+      className="relative h-full w-full select-none overflow-hidden bg-[var(--map3d-stage)]"
+      style={{ touchAction: 'none' }}
     >
       <svg ref={leadRef} className="pointer-events-none absolute inset-0 h-full w-full" />
       <div ref={layerRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
       <div data-map-controls className="absolute right-3 top-3 flex gap-2">
-        <label className="flex h-8 items-center gap-1.5 border border-border bg-card px-2.5 text-xs text-muted-foreground">
+        <label className="map-label-toggle">
           <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />
-          이름표
+          장비 이름 표시
         </label>
       </div>
     </div>

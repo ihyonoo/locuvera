@@ -101,7 +101,7 @@ function renderEquipmentMarker(
         ) : null}
         <span
           data-testid={`floor-map-equipment-dot-${dot.tag_id}`}
-          className={`relative block rounded-full ${status.className}${isSpotlighted ? ' map-marker-spotlight' : ''}`}
+          className={`map-marker-dot relative block rounded-full ${status.className}${isSpotlighted ? ' map-marker-spotlight' : ''}`}
           style={{ width: dotSize, height: dotSize }}
         >
           {dot.badge}

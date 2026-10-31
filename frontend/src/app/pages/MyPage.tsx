@@ -1,11 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
-import { Button } from '../components/ui/button';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useNavigate } from 'react-router';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import AppShell from '../components/layout/AppShell';
-import AdminNav from '../components/layout/AdminNav';
-import StaffNav from '../components/layout/StaffNav';
+import StaffShell from '../components/layout/StaffShell';
 import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordMatchHint from '../components/PasswordMatchHint';
 import { getPasswordError } from '../lib/passwordPolicy';
@@ -19,7 +15,6 @@ import {
   type AuthUser,
 } from '../lib/auth';
 import { API_BASE_URL, isGoogleLoginEnabled } from '../lib/runtime';
-import { getStoredTheme, storeTheme, syncThemeForPath, type Theme } from '../lib/theme';
 
 type MeUser = AuthUser & { created_at?: string | null; google_linked?: boolean };
 
@@ -38,9 +33,12 @@ const DEMO_NOTICE = '데모 체험 계정에서는 계정 설정을 변경할 �
 
 type AccountAction = 'password' | 'email' | 'google' | 'withdraw';
 
-function formatDateTime(epoch: number | null | undefined) {
-  if (!epoch) return '-';
-  return new Date(epoch * 1000).toLocaleString('ko-KR', { hour12: false });
+// 2026.10.31 14:02 — 사용 이력용 짧은 시각
+function formatShort(epoch: number | null | undefined) {
+  if (!epoch) return null;
+  const d = new Date(epoch * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function formatDate(iso: string | null | undefined) {
@@ -52,8 +50,6 @@ function formatDate(iso: string | null | undefined) {
 
 export default function MyPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [user, setUser] = useState<MeUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -142,7 +138,7 @@ export default function MyPage() {
     setPwMsg(null);
   };
 
-  const submitPassword = async (e: React.FormEvent) => {
+  const submitPassword = async (e: FormEvent) => {
     e.preventDefault();
     setPwMsg(null);
     const policyError = getPasswordError(newPw);
@@ -194,7 +190,7 @@ export default function MyPage() {
     setEmailMsg(null);
   };
 
-  const submitEmail = async (e: React.FormEvent) => {
+  const submitEmail = async (e: FormEvent) => {
     e.preventDefault();
     setEmailMsg(null);
     setEmailBusy(true);
@@ -295,366 +291,365 @@ export default function MyPage() {
     }
   };
 
-  // 세션에 저장된 역할을 즉시 참조해, /auth/me 응답을 기다리는 동안 네비게이션이 깜빡이지 않게 한다.
+  // 세션에 저장된 역할을 즉시 참조해, /auth/me 응답을 기다리는 동안 메뉴가 깜빡이지 않게 한다.
   const sessionRole = (getStoredAuthSession()?.user?.role ?? user?.role ?? '').toLowerCase();
 
+  const togglePasswordForm = () => {
+    if (blockedForDemo('password')) return;
+    setPwOpen((open) => {
+      if (open) resetPasswordForm();
+      return !open;
+    });
+  };
+
+  const toggleEmailForm = () => {
+    if (blockedForDemo('email')) return;
+    setEmailOpen((open) => {
+      if (open) resetEmailForm();
+      return !open;
+    });
+  };
+
+  const cancelWithdraw = () => {
+    setWithdrawOpen(false);
+    setWithdrawPw('');
+    setWithdrawMsg('');
+  };
+
   return (
-    <AppShell
-      wide
-      actions={sessionRole === 'admin' ? <AdminNav active="mypage" /> : <StaffNav active="mypage" />}
-      contentClassName="pt-6 sm:pt-5"
-    >
-      {/* 다른 관리 화면과 같은 본문 폭 */}
-      <div className="mx-auto w-full max-w-[1360px] space-y-4">
+    <StaffShell menu={sessionRole === 'admin' ? 'admin' : 'staff'} current="mypage">
+      <div className="staff-me">
         {loading ? (
-          <div className="alert">불러오는 중입니다...</div>
+          <div className="staff-empty">불러오는 중입니다…</div>
         ) : loadError ? (
-          <div className="alert alert-error">{loadError}</div>
+          <div className="staff-alert">{loadError}</div>
         ) : user ? (
           <>
-            {/* 내 정보 */}
-            <section className="surface-panel p-6 fade-rise">
-              <div className="panel-title mb-4">내 정보</div>
-              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">
-                <InfoField label="아이디" value={user.username} />
-                <InfoField label="이름" value={user.display_name} />
-                <div className="space-y-1">
-                  <dt className="text-xs text-muted-foreground">이메일</dt>
-                  <dd className="flex items-center gap-2 text-sm">
-                    <span>{user.email ?? '-'}</span>
+            {/* 프로필 머리글 — 이름 · 부서·직책 · 아이디/권한/가입일 */}
+            <header className="staff-me__header">
+              <h1 className="staff-me__name">{user.display_name}</h1>
+              {isStaff && (user.department || user.position) ? (
+                <div className="staff-profile__meta">
+                  {[user.department, user.position].filter(Boolean).join(' · ')}
+                </div>
+              ) : null}
+              <dl className="staff-facts-inline">
+                <div>
+                  <dt>아이디</dt>
+                  <dd>{user.username}</dd>
+                </div>
+                <div>
+                  <dt>권한</dt>
+                  <dd>{ROLE_LABEL[(user.role ?? '').toLowerCase()] ?? user.role}</dd>
+                </div>
+                <div>
+                  <dt>가입일</dt>
+                  <dd>{formatDate(user.created_at)}</dd>
+                </div>
+                {isGoogleLoginEnabled() ? (
+                  <div>
+                    <dt>Google</dt>
+                    <dd>{user.google_linked ? '연동됨' : '미연동'}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {user.is_demo ? <p className="staff-note">데모 체험 계정은 계정 설정을 바꿀 수 없습니다.</p> : null}
+            </header>
+
+            {/* 계정 — 줄마다 '변경'을 누르면 그 줄 아래에 입력칸이 펼쳐진다 */}
+            <section className="staff-panel">
+              <h2 className="staff-panel__title">계정</h2>
+
+              <SettingRow
+                label="이메일"
+                value={
+                  <>
+                    <span>{user.email ?? '등록된 이메일 없음'}</span>
                     {user.email ? (
-                      <span
-                        className={`inline-flex items-center border px-2 py-0.5 text-xs ${
-                          user.email_verified ? 'tone-ok' : 'tone-warn'
-                        }`}
-                      >
+                      <span className="staff-status">
+                        <span className={user.email_verified ? 'staff-led' : 'staff-led staff-led--warn'} />
                         {user.email_verified ? '인증됨' : '미인증'}
                       </span>
                     ) : null}
-                  </dd>
-                </div>
-                <InfoField label="권한" value={ROLE_LABEL[(user.role ?? '').toLowerCase()] ?? user.role} />
-                {(user.role ?? '').toLowerCase() === 'staff' ? (
-                  <>
-                    <InfoField label="부서" value={user.department ?? '-'} />
-                    <InfoField label="직책" value={user.position ?? '-'} />
                   </>
-                ) : null}
-                <InfoField label="가입일" value={formatDate(user.created_at)} />
-                {isGoogleLoginEnabled() ? (
-                  <InfoField label="Google 연동" value={user.google_linked ? '연동됨' : '미연동'} />
-                ) : null}
-              </dl>
-            </section>
-
-            {/* 화면 테마 — 기기(브라우저)별로 저장한다 */}
-            <section className="surface-panel p-6 fade-rise">
-              <div className="panel-title mb-1">화면 테마</div>
-              <p className="panel-copy mb-4">이 기기에서만 적용됩니다.</p>
-              <div role="radiogroup" aria-label="화면 테마" className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                {(
-                  [
-                    ['light', '라이트'],
-                    ['dark', '다크'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <label key={value} className="flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="screen-theme"
-                      value={value}
-                      checked={theme === value}
-                      onChange={() => {
-                        setTheme(value);
-                        storeTheme(value);
-                        syncThemeForPath(location.pathname);
-                      }}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </section>
-
-            {/* 비밀번호 변경 (토글) */}
-            <section className="surface-panel p-6 fade-rise">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="panel-title">비밀번호 변경</div>
-                  <p className="panel-copy mt-1">변경하면 다른 기기의 로그인은 자동으로 해제됩니다.</p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (blockedForDemo('password')) return;
-                    setPwOpen((open) => {
-                      if (open) resetPasswordForm();
-                      return !open;
-                    });
-                  }}
-                >
-                  {pwOpen ? '닫기' : '변경'}
-                </Button>
-              </div>
-              {demoBlocked === 'password' ? <div className="alert alert-error mt-4">{DEMO_NOTICE}</div> : null}
-              {/* 패널은 넓어져도 입력 줄은 읽기 좋은 폭(max-w-2xl)으로 묶어 둔다 */}
-              {pwOpen ? (
-                <form onSubmit={submitPassword} className="mt-4 max-w-2xl space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="current-pw">현재 비밀번호</Label>
-                    <Input
-                      id="current-pw"
-                      type="password"
-                      value={currentPw}
-                      onChange={(e) => setCurrentPw(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-pw">새 비밀번호</Label>
-                    <Input
-                      id="new-pw"
-                      type="password"
-                      value={newPw}
-                      onChange={(e) => setNewPw(e.target.value)}
-                      placeholder="영문·숫자·특수문자 포함 8자 이상"
-                      required
-                    />
-                    <PasswordChecklist value={newPw} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-pw-confirm">새 비밀번호 확인</Label>
-                    <Input
-                      id="new-pw-confirm"
-                      type="password"
-                      value={newPwConfirm}
-                      onChange={(e) => setNewPwConfirm(e.target.value)}
-                      placeholder="새 비밀번호 다시 입력"
-                      required
-                    />
-                    <PasswordMatchHint password={newPw} confirm={newPwConfirm} />
-                  </div>
-                  {pwMsg ? (
-                    <div className={pwMsg.tone === 'ok' ? 'alert alert-success' : 'alert alert-error'}>
-                      {pwMsg.text}
+                }
+                help="변경하면 새 이메일로 인증 링크가 발송됩니다. 재인증 전까지는 재로그인이 제한될 수 있습니다."
+                action={
+                  <button type="button" className="staff-btn" onClick={toggleEmailForm}>
+                    {emailOpen ? '닫기' : '변경'}
+                  </button>
+                }
+              >
+                {demoBlocked === 'email' ? <div className="staff-alert">{DEMO_NOTICE}</div> : null}
+                {emailOpen ? (
+                  <form onSubmit={submitEmail} className="staff-form">
+                    <Field id="new-email" label="새 이메일">
+                      <Input
+                        id="new-email"
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="new@example.com"
+                        required
+                      />
+                    </Field>
+                    <Field id="email-pw" label="현재 비밀번호">
+                      <Input
+                        id="email-pw"
+                        type="password"
+                        value={emailPw}
+                        onChange={(e) => setEmailPw(e.target.value)}
+                        required
+                      />
+                    </Field>
+                    <Notice msg={emailMsg} />
+                    <div className="staff-actions">
+                      <button type="submit" className="staff-btn staff-btn--primary" disabled={emailBusy}>
+                        {emailBusy ? '변경 중…' : '이메일 변경'}
+                      </button>
+                      {user.email && !user.email_verified ? (
+                        <button type="button" className="staff-btn" onClick={resendVerification}>
+                          인증 메일 다시 보내기
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
-                  <Button type="submit" disabled={pwBusy}>
-                    {pwBusy ? '변경 중...' : '비밀번호 변경'}
-                  </Button>
-                </form>
+                  </form>
+                ) : null}
+              </SettingRow>
+
+              <SettingRow
+                label="비밀번호"
+                help="변경하면 다른 기기의 로그인은 자동으로 해제됩니다."
+                action={
+                  <button type="button" className="staff-btn" onClick={togglePasswordForm}>
+                    {pwOpen ? '닫기' : '변경'}
+                  </button>
+                }
+              >
+                {demoBlocked === 'password' ? <div className="staff-alert">{DEMO_NOTICE}</div> : null}
+                {pwOpen ? (
+                  <form onSubmit={submitPassword} className="staff-form">
+                    <Field id="current-pw" label="현재 비밀번호">
+                      <Input
+                        id="current-pw"
+                        type="password"
+                        value={currentPw}
+                        onChange={(e) => setCurrentPw(e.target.value)}
+                        required
+                      />
+                    </Field>
+                    <Field id="new-pw" label="새 비밀번호">
+                      <Input
+                        id="new-pw"
+                        type="password"
+                        value={newPw}
+                        onChange={(e) => setNewPw(e.target.value)}
+                        placeholder="영문·숫자·특수문자 포함 8자 이상"
+                        required
+                      />
+                      <PasswordChecklist value={newPw} />
+                    </Field>
+                    <Field id="new-pw-confirm" label="새 비밀번호 확인">
+                      <Input
+                        id="new-pw-confirm"
+                        type="password"
+                        value={newPwConfirm}
+                        onChange={(e) => setNewPwConfirm(e.target.value)}
+                        placeholder="새 비밀번호 다시 입력"
+                        required
+                      />
+                      <PasswordMatchHint password={newPw} confirm={newPwConfirm} />
+                    </Field>
+                    <Notice msg={pwMsg} />
+                    <div className="staff-actions">
+                      <button type="submit" className="staff-btn staff-btn--primary" disabled={pwBusy}>
+                        {pwBusy ? '변경 중…' : '비밀번호 변경'}
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+              </SettingRow>
+
+              {/* Google 연동 — Google 로그인이 켜져 있을 때만 */}
+              {isGoogleLoginEnabled() ? (
+                <SettingRow
+                  label="Google 연동"
+                  help={
+                    user.google_linked
+                      ? '이 계정은 Google 로그인과 연동되어 있습니다.'
+                      : '같은 인증 이메일로 Google 로그인하면 이 계정에 자동으로 연동됩니다.'
+                  }
+                  action={
+                    user.google_linked ? (
+                      <button type="button" className="staff-btn" onClick={unlinkGoogle} disabled={googleBusy}>
+                        {googleBusy ? '해제 중…' : '연동 해제'}
+                      </button>
+                    ) : (
+                      <button type="button" className="staff-btn" onClick={linkGoogle}>
+                        연동
+                      </button>
+                    )
+                  }
+                >
+                  {demoBlocked === 'google' ? <div className="staff-alert">{DEMO_NOTICE}</div> : null}
+                  <Notice msg={googleMsg} />
+                </SettingRow>
               ) : null}
             </section>
 
-            {/* 이메일 변경 (토글) */}
-            <section className="surface-panel p-6 fade-rise">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="panel-title">이메일 변경</div>
-                  <p className="panel-copy mt-1">
-                    변경 후 새 이메일로 인증 링크가 발송됩니다. 재인증 전까지는 재로그인이 제한될 수 있습니다.
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (blockedForDemo('email')) return;
-                    setEmailOpen((open) => {
-                      if (open) resetEmailForm();
-                      return !open;
-                    });
-                  }}
-                >
-                  {emailOpen ? '닫기' : '변경'}
-                </Button>
-              </div>
-              {demoBlocked === 'email' ? <div className="alert alert-error mt-4">{DEMO_NOTICE}</div> : null}
-              {emailOpen ? (
-                <form onSubmit={submitEmail} className="mt-4 max-w-2xl space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-email">새 이메일</Label>
-                    <Input
-                      id="new-email"
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder="new@example.com"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email-pw">현재 비밀번호</Label>
-                    <Input
-                      id="email-pw"
-                      type="password"
-                      value={emailPw}
-                      onChange={(e) => setEmailPw(e.target.value)}
-                      required
-                    />
-                  </div>
-                  {emailMsg ? (
-                    <div className={emailMsg.tone === 'ok' ? 'alert alert-success' : 'alert alert-error'}>
-                      {emailMsg.text}
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={emailBusy}>
-                      {emailBusy ? '변경 중...' : '이메일 변경'}
-                    </Button>
-                    {user.email && !user.email_verified ? (
-                      <Button type="button" variant="outline" onClick={resendVerification}>
-                        인증 메일 재발송
-                      </Button>
-                    ) : null}
-                  </div>
-                </form>
-              ) : null}
-            </section>
-
-            {/* Google 연동 — Google 로그인이 켜져 있을 때만 */}
-            {isGoogleLoginEnabled() ? (
-              <section className="surface-panel p-6 fade-rise">
-                <div className="panel-title mb-1">Google 연동</div>
-                <p className="panel-copy mb-4">
-                  {user.google_linked
-                    ? '이 계정은 Google 로그인과 연동되어 있습니다.'
-                    : '동일한 인증 이메일로 Google 로그인하면 이 계정에 자동으로 연동됩니다.'}
-                </p>
-                {googleMsg ? (
-                  <div className={`mb-4 ${googleMsg.tone === 'ok' ? 'alert alert-success' : 'alert alert-error'}`}>
-                    {googleMsg.text}
-                  </div>
-                ) : null}
-                {demoBlocked === 'google' ? <div className="alert alert-error mb-4">{DEMO_NOTICE}</div> : null}
-                {user.google_linked ? (
-                  <Button variant="outline" onClick={unlinkGoogle} disabled={googleBusy}>
-                    {googleBusy ? '해제 중...' : 'Google 연동 해제'}
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={linkGoogle}>
-                    Google 계정 연동
-                  </Button>
-                )}
-              </section>
-            ) : null}
-
-            {/* 내 사용 이력 (staff 전용) */}
+            {/* 내 사용 이력 (의료진 전용) — 장비마다 한 덩어리 */}
             {isStaff ? (
-              <section className="surface-panel p-6 fade-rise">
-                <div className="panel-title mb-1">내 사용 이력</div>
-                <p className="panel-copy mb-4">내가 대여/반납한 장비 기록입니다.</p>
+              <section className="staff-panel">
+                <div className="staff-panel__head">
+                  <h2 className="staff-panel__title">내 사용 이력</h2>
+                  {history.length > 0 ? <span className="staff-panel__meta">{history.length}건</span> : null}
+                </div>
                 {history.length === 0 ? (
-                  <div className="alert">사용 이력이 없습니다.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-xs text-muted-foreground">
-                          <th className="py-2 pr-3 font-medium">장비</th>
-                          <th className="py-2 pr-3 font-medium">대여 (위치 · 시각)</th>
-                          <th className="py-2 pr-3 font-medium">반납 (위치 · 시각)</th>
-                          <th className="py-2 pr-3 font-medium">이동 경로</th>
-                          <th className="py-2 font-medium">상태</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {history.map((item) => (
-                          <tr key={item.usage_id} className="border-b last:border-0 align-top">
-                            <td className="py-2 pr-3">
-                              <div className="font-medium">{item.equipment.name ?? '-'}</div>
-                              {item.equipment.type ? (
-                                <div className="text-xs text-muted-foreground">{item.equipment.type}</div>
-                              ) : null}
-                            </td>
-                            <td className="py-2 pr-3">
-                              <div>{item.checkout.location ?? '-'}</div>
-                              <div className="text-xs text-muted-foreground">{formatDateTime(item.checkout.at)}</div>
-                            </td>
-                            <td className="py-2 pr-3">
-                              <div>{item.return.location ?? '-'}</div>
-                              <div className="text-xs text-muted-foreground">{formatDateTime(item.return.at)}</div>
-                            </td>
-                            <td className="py-2 pr-3">
-                              {item.movement_path && item.movement_path.length > 0
-                                ? item.movement_path.map((point) => point.location).join(' → ')
-                                : '-'}
-                            </td>
-                            <td className="py-2">
-                              <span
-                                className={`inline-flex items-center border px-2 py-0.5 text-xs ${
-                                  item.usage_status === 'returned' ? 'tone-neutral' : 'tone-ok'
-                                }`}
-                              >
-                                {item.usage_status === 'returned' ? '반납됨' : '사용 중'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="staff-empty-block">
+                    <p>아직 대여하거나 반납한 장비가 없습니다.</p>
+                    <button type="button" className="staff-btn" onClick={() => navigate('/equipment')}>
+                      장비 찾기
+                    </button>
                   </div>
+                ) : (
+                  <ul className="staff-history">
+                    {history.map((item) => {
+                      const inUse = item.usage_status !== 'returned';
+                      const checkoutAt = formatShort(item.checkout.at);
+                      const returnAt = formatShort(item.return.at);
+                      return (
+                        <li key={item.usage_id} className="staff-history__item">
+                          <div className="staff-history__head">
+                            <span className="staff-history__name">{item.equipment.name ?? '-'}</span>
+                            <span className="staff-status">
+                              <span className={inUse ? 'staff-led' : 'staff-led staff-led--off'} />
+                              {inUse ? '사용 중' : '반납됨'}
+                            </span>
+                          </div>
+                          {item.equipment.type ? (
+                            <div className="staff-history__type">{item.equipment.type}</div>
+                          ) : null}
+                          <dl className="staff-history__grid">
+                            <dt>대여</dt>
+                            <dd>
+                              {item.checkout.location ?? '-'}
+                              {checkoutAt ? <time> · {checkoutAt}</time> : null}
+                            </dd>
+                            <dt>반납</dt>
+                            <dd>
+                              {item.return.location ?? '-'}
+                              {returnAt ? <time> · {returnAt}</time> : null}
+                            </dd>
+                            {item.movement_path && item.movement_path.length > 0 ? (
+                              <>
+                                <dt>경로</dt>
+                                <dd>{item.movement_path.map((point) => point.location).join(' → ')}</dd>
+                              </>
+                            ) : null}
+                          </dl>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </section>
             ) : null}
 
-            {/* 회원 탈퇴 */}
-            <section className="surface-panel p-6 fade-rise">
-              <div className="panel-title mb-1 text-err">회원 탈퇴</div>
-              <p className="panel-copy mb-4">탈퇴하면 계정이 비활성화되고 다시 로그인할 수 없습니다.</p>
-              {demoBlocked === 'withdraw' ? <div className="alert alert-error mb-4">{DEMO_NOTICE}</div> : null}
-              {!withdrawOpen ? (
-                <Button
-                  variant="destructive"
+            {/* 회원 탈퇴 — 맨 아래 조용한 글자 단추, 누르면 그 자리에서 비밀번호 확인 */}
+            <div className="staff-me__danger">
+              {demoBlocked === 'withdraw' ? <div className="staff-alert">{DEMO_NOTICE}</div> : null}
+              {withdrawOpen ? (
+                <section className="staff-panel staff-withdraw">
+                  <div className="staff-withdraw__title">회원 탈퇴</div>
+                  <p className="staff-setting__help">탈퇴하면 계정이 비활성화되고 다시 로그인할 수 없습니다.</p>
+                  <div className="staff-form">
+                    <Field id="withdraw-pw" label="현재 비밀번호 확인">
+                      <Input
+                        id="withdraw-pw"
+                        type="password"
+                        value={withdrawPw}
+                        onChange={(e) => setWithdrawPw(e.target.value)}
+                        required
+                      />
+                    </Field>
+                    {withdrawMsg ? <div className="staff-alert">{withdrawMsg}</div> : null}
+                    <div className="staff-actions">
+                      <button
+                        type="button"
+                        className="staff-btn staff-btn--danger"
+                        onClick={submitWithdraw}
+                        disabled={withdrawBusy || !withdrawPw}
+                      >
+                        {withdrawBusy ? '처리 중…' : '탈퇴 확인'}
+                      </button>
+                      <button type="button" className="staff-btn" onClick={cancelWithdraw}>
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              ) : (
+                <button
+                  type="button"
+                  className="staff-quiet-danger"
                   onClick={() => {
                     if (blockedForDemo('withdraw')) return;
                     setWithdrawOpen(true);
                   }}
                 >
                   회원 탈퇴
-                </Button>
-              ) : (
-                <div className="max-w-2xl space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="withdraw-pw">현재 비밀번호 확인</Label>
-                    <Input
-                      id="withdraw-pw"
-                      type="password"
-                      value={withdrawPw}
-                      onChange={(e) => setWithdrawPw(e.target.value)}
-                      required
-                    />
-                  </div>
-                  {withdrawMsg ? <div className="alert alert-error">{withdrawMsg}</div> : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="destructive" onClick={submitWithdraw} disabled={withdrawBusy || !withdrawPw}>
-                      {withdrawBusy ? '처리 중...' : '탈퇴 확인'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setWithdrawOpen(false);
-                        setWithdrawPw('');
-                        setWithdrawMsg('');
-                      }}
-                    >
-                      취소
-                    </Button>
-                  </div>
-                </div>
+                </button>
               )}
-            </section>
+            </div>
           </>
         ) : null}
       </div>
-    </AppShell>
+    </StaffShell>
   );
 }
 
-function InfoField({ label, value }: { label: string; value: string | null | undefined }) {
+type Msg = { tone: 'ok' | 'err'; text: string } | null;
+
+function Notice({ msg }: { msg: Msg }) {
+  if (!msg) return null;
+  return <div className={msg.tone === 'ok' ? 'staff-alert staff-alert--ok' : 'staff-alert'}>{msg.text}</div>;
+}
+
+// 라벨은 입력칸 위
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
-    <div className="space-y-1">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{value ?? '-'}</dd>
+    <div className="staff-field">
+      <label htmlFor={id}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// 설정 한 줄 — 왼쪽에 이름·값·설명, 오른쪽에 동작 단추, 아래에 펼치는 내용
+function SettingRow({
+  label,
+  value,
+  help,
+  action,
+  children,
+}: {
+  label: string;
+  value?: ReactNode;
+  help?: string;
+  action?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="staff-setting">
+      <div className="staff-setting__row">
+        <div className="staff-setting__main">
+          <div className="staff-setting__label">{label}</div>
+          {value ? <div className="staff-setting__value">{value}</div> : null}
+          {help ? <div className="staff-setting__help">{help}</div> : null}
+        </div>
+        {action}
+      </div>
+      {children}
     </div>
   );
 }

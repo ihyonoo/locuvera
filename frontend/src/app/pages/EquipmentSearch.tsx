@@ -1,7 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   Dialog,
@@ -12,8 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../components/ui/dialog';
-import AppShell from '../components/layout/AppShell';
-import StaffNav from '../components/layout/StaffNav';
+import StaffShell from '../components/layout/StaffShell';
+import { PillToggle, ToggleSwitch } from '../components/layout/staffControls';
 import FloorMapView, {
   type FloorMapPin,
   type FloorMapEquipmentDot,
@@ -21,11 +19,10 @@ import FloorMapView, {
 } from '../components/FloorMapView';
 import Map3DBoundary from '../components/floor3d/Map3DBoundary';
 import { FLOOR_MAPS, type FloorNumber } from '../lib/floorMaps';
-import { DEFAULT_MAP_DIMENSION, isWebGLAvailable, MAP_3D_ASPECT, type MapDimension } from '../lib/mapDimension';
+import { DEFAULT_MAP_DIMENSION, isWebGLAvailable, type MapDimension } from '../lib/mapDimension';
 import { getAmenityZonesForFloor } from '../lib/floorZones';
 import { ZONE_BOUNDS } from '../lib/floorZoneBounds';
 import { polygonCentroid } from '../lib/floorMapLayout';
-import ResizableSidebar from '../components/layout/ResizableSidebar';
 import { formatIBeaconTag } from '../lib/iBeaconTag';
 import { API_BASE_URL } from '../lib/runtime';
 import { buildAuthHeaders, getStoredAuthSession, LOGIN_PATH } from '../lib/auth';
@@ -33,7 +30,7 @@ import { useAuthGuard, useLogout } from '../lib/useAuthGuard';
 import { useMediaQuery } from '../lib/useMediaQuery';
 
 // 사이드바가 지도 옆에 나란히 붙는 시점(xl) — 그 미만에서는 사이드바 대신
-// 가로 스크롤 필터 바 + 결과 목록 다이얼로그를 쓴다.
+// 위에 검색칸·상세검색 + 결과 목록 창을 쓴다.
 const DESKTOP_QUERY = '(min-width: 1280px)';
 
 type LiveLocationItem = {
@@ -91,19 +88,11 @@ type EquipmentViewItem = {
 // three.js는 3D 보기를 쓸 때만 내려받는다
 const FloorMap3D = lazy(() => import('../components/floor3d/FloorMap3D'));
 
-function getOnlineDotClass(isOnline: boolean) {
-  return isOnline ? 'h-2.5 w-2.5 rounded-full dot-ok' : 'h-2.5 w-2.5 rounded-full dot-warn';
-}
-
-function getAssetStatusColor(status: string) {
-  switch (status) {
-    case 'checked_out':
-      return 'h-2.5 w-2.5 rounded-full dot-err';
-    case 'inactive':
-      return 'h-2.5 w-2.5 rounded-full solid-neutral';
-    default:
-      return 'h-2.5 w-2.5 rounded-full dot-ok';
-  }
+// 상태 점 — 지도 핀과 같은 색(초록 사용 가능, 빨강 대여 중, 회색 비활성)
+function statusLedClass(status: string) {
+  if (status === 'checked_out') return 'staff-led staff-led--busy';
+  if (status === 'inactive') return 'staff-led staff-led--off';
+  return 'staff-led';
 }
 
 function getAssetStatusLabel(status: string) {
@@ -340,21 +329,29 @@ export default function EquipmentSearch() {
     return [...readerRows, ...amenityRows];
   }, [readers, selectedFloor, searchAndTypeFilteredEquipment]);
 
-  // 지도 뷰와 목록 뷰가 같은 층 탭을 쓴다 — 뷰를 오가도 보고 있던 층이 유지된다.
-  const floorTabs = (
-    <div data-testid="floor-tabs" className="flex gap-2">
-      {FLOOR_MAPS.map((f) => (
+  // 층 단추 — 동그란 1F~5F(화면 낭독기는 'n층'). 지도 보기와 목록 보기가 같은 층을 쓴다.
+  // 넓은 화면은 지도 오른쪽 세로(위가 높은 층), 좁은 화면은 지도 위 가로 한 줄
+  const floorButtons = (stacked: boolean) => (
+    <div
+      data-testid="floor-tabs"
+      role="group"
+      aria-label="층 선택"
+      className={stacked ? 'staff-elevator staff-elevator--row' : 'staff-elevator'}
+    >
+      {(stacked ? FLOOR_MAPS : [...FLOOR_MAPS].reverse()).map((f) => (
         <button
           key={f.floor}
           type="button"
-          className={f.floor === selectedFloor ? 'app-nav-tab app-nav-tab--active' : 'app-nav-tab'}
+          aria-label={f.label}
+          aria-pressed={f.floor === selectedFloor}
+          className={f.floor === selectedFloor ? 'staff-floor staff-floor--on' : 'staff-floor'}
           onClick={() => {
             setSelectedFloor(f.floor);
             setHighlightedZone(null);
             setSelectedEquipment(null);
           }}
         >
-          {f.label}
+          {f.floor}F
         </button>
       ))}
     </div>
@@ -365,11 +362,23 @@ export default function EquipmentSearch() {
     setSelectedEquipment((prev) => (prev === tagId ? null : tagId));
   };
 
-  // 검색/필터 필드들 — 데스크탑 사이드바(세로 목록)와 모바일 가로 스크롤 바에서 함께 쓴다.
-  // compact=true면 라벨을 없애고 스크롤 바 안에서 줄어들지 않는 폭을 준다.
+  const searchField = (
+    <div className="staff-search">
+      <Search className="staff-search__icon" aria-hidden="true" />
+      <input
+        aria-label="장비 검색"
+        placeholder="태그 ID, 장비명, 위치 검색"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+    </div>
+  );
+
+  // 검색/필터 필드들 — 넓은 화면 사이드바(두 칸 격자)와 좁은 화면 가로 스크롤 줄에서 함께 쓴다.
+  // compact=true면 스크롤 줄 안에서 줄어들지 않는 폭을 준다.
   const typeFilterField = (compact: boolean) => (
-    <div className={compact ? 'w-36 shrink-0 space-y-1' : 'space-y-2'}>
-      <label className={compact ? 'text-xs text-muted-foreground' : 'text-base font-medium'}>장비 유형</label>
+    <div className={compact ? 'w-36 shrink-0' : undefined}>
+      <label>장비 유형</label>
       <Select value={selectedType} onValueChange={setSelectedType}>
         <SelectTrigger>
           <SelectValue placeholder="유형 선택" />
@@ -386,8 +395,8 @@ export default function EquipmentSearch() {
   );
 
   const floorFilterField = (compact: boolean) => (
-    <div className={compact ? 'w-28 shrink-0 space-y-1' : 'space-y-2'}>
-      <label className={compact ? 'text-xs text-muted-foreground' : 'text-base font-medium'}>층</label>
+    <div className={compact ? 'w-28 shrink-0' : undefined}>
+      <label>층</label>
       <Select
         value={String(selectedListFloor)}
         onValueChange={(value) => setSelectedListFloor(value === '전체' ? '전체' : (Number(value) as FloorNumber))}
@@ -408,8 +417,8 @@ export default function EquipmentSearch() {
   );
 
   const locationFilterField = (compact: boolean) => (
-    <div className={compact ? 'w-36 shrink-0 space-y-1' : 'space-y-2'}>
-      <label className={compact ? 'text-xs text-muted-foreground' : 'text-base font-medium'}>위치 필터</label>
+    <div className={compact ? 'w-36 shrink-0' : undefined}>
+      <label>위치 필터</label>
       <Select value={selectedLocation} onValueChange={setSelectedLocation}>
         <SelectTrigger aria-label="위치">
           <SelectValue placeholder="위치 선택" />
@@ -425,53 +434,49 @@ export default function EquipmentSearch() {
     </div>
   );
 
-  // 두 토글은 짝이라 한 줄에 둔다 — 폭이 좁으면 자동으로 줄바꿈된다.
-  const toggleFilters = () => (
-    <div data-testid="equipment-filter-toggles" className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      <label className="flex items-center gap-2 text-base font-medium">
-        <input type="checkbox" checked={availableOnly} onChange={(event) => setAvailableOnly(event.target.checked)} />
-        사용 가능 장비만 보기
-      </label>
-
-      <label className="flex items-center gap-2 text-base font-medium">
-        <input type="checkbox" checked={hideSimulated} onChange={(event) => setHideSimulated(event.target.checked)} />
-        시뮬레이션 장비 숨기기
-      </label>
+  // 두 스위치는 짝이라 한 줄에 둔다 — 폭이 좁으면 자동으로 줄바꿈된다.
+  const toggleFilters = (
+    <div data-testid="equipment-filter-toggles" className="staff-switches">
+      <ToggleSwitch checked={availableOnly} onChange={setAvailableOnly}>
+        사용 가능만
+      </ToggleSwitch>
+      <ToggleSwitch checked={hideSimulated} onChange={setHideSimulated}>
+        시뮬레이션 숨김
+      </ToggleSwitch>
     </div>
   );
 
-  // 필터링된 장비 목록 항목들 — 데스크탑 사이드바에서는 그대로, 모바일 결과 다이얼로그에서는
-  // 항목을 고르면 다이얼로그를 닫도록 afterSelect를 넘긴다.
+  const resultTitle = `${activeFilterLabels.length > 0 ? '검색 결과' : '전체'} ${filteredEquipment.length}건`;
+
+  // 필터링된 장비 목록 — 넓은 화면 사이드바에서는 그대로, 좁은 화면 결과 창에서는
+  // 항목을 고르면 창을 닫도록 afterSelect를 넘긴다.
   const resultsListItems = (afterSelect?: () => void) => {
     if (isLoading) {
-      return <div className="empty-state">실시간 데이터 로딩 중입니다.</div>;
+      return <div className="staff-empty">실시간 데이터를 불러오는 중입니다.</div>;
     }
     if (filteredEquipment.length === 0) {
-      return <div className="empty-state">표시할 실시간 태그가 없습니다.</div>;
+      return <div className="staff-empty">조건에 맞는 장비가 없습니다.</div>;
     }
     return filteredEquipment.map((item) => (
       <button
         key={item.id}
         type="button"
+        title={item.id}
+        aria-pressed={selectedEquipment === item.id}
+        className={selectedEquipment === item.id ? 'staff-row staff-row--on' : 'staff-row'}
         onClick={() => {
           toggleSelectedEquipment(item.id);
           afterSelect?.();
         }}
-        title={item.id}
-        className={`w-full border-b border-border px-3 py-2 text-left transition-all last:border-b-0 ${
-          selectedEquipment === item.id
-            ? 'border-l-2 border-l-foreground bg-secondary'
-            : 'border-l-2 border-l-transparent hover:bg-secondary'
-        }`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-[1.05rem] leading-tight">{item.name}</span>
-          <span className={`shrink-0 ${getAssetStatusColor(item.assetStatus)}`} />
-        </div>
-        <div className="truncate text-sm text-muted-foreground">
-          {item.location}
-          {item.currentHolderName ? ` · ${item.currentHolderName}` : ''}
-        </div>
+        <span className="staff-row__main">
+          <span className="staff-row__name">{item.name}</span>
+          <span className="staff-row__sub">
+            {item.location}
+            {item.currentHolderName ? ` · ${item.currentHolderName}` : ''}
+          </span>
+        </span>
+        <span className={statusLedClass(item.assetStatus)} title={getAssetStatusLabel(item.assetStatus)} />
       </button>
     ));
   };
@@ -590,336 +595,299 @@ export default function EquipmentSearch() {
     return null;
   }
 
-  return (
-    <AppShell bleed actions={<StaffNav active="equipment" />} contentClassName="pt-4 sm:pt-5">
-      {/* 사이드바를 상하 꽉 채우기 위해, AppShell 공용 상하 패딩(contentClassName="pt-4 sm:pt-5" +
-          .app-shell__content의 3.5rem 하단 패딩)을 이 행 전체에서 걷어내고, 사이드바가 아닌
-          나머지(지도+상세/구역안내) 쪽에만 그 패딩을 되돌려준다. */}
-      {/* xl:items-start — 자식이 stretch로 늘어나면 사이드바의 sticky가 동작하지 않는다 */}
-      <div className="-mt-4 -mb-14 flex w-full flex-col gap-4 sm:-mt-5 xl:flex-row xl:items-start">
-        {isDesktop ? (
-          <ResizableSidebar testId="equipment-sidebar">
-            <>
-              <div className="panel-header shrink-0">
-                <div>
-                  <div className="panel-title">장비 위치 검색</div>
-                </div>
-                <Badge variant="outline">추적 중 {equipment.length}개</Badge>
-              </div>
-              <div className="shrink-0 space-y-3">
-                <Input
-                  placeholder="태그 ID, 장비명, 위치 검색"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-
-                {typeFilterField(false)}
-                {floorFilterField(false)}
-                {locationFilterField(false)}
-                {toggleFilters()}
-
-                {fetchError ? <div className="alert alert-error">{fetchError}</div> : null}
-              </div>
-
-              <div data-testid="equipment-result-summary" className="mt-4 shrink-0 border-t border-border pt-3">
-                <div className="text-base font-medium">
-                  {activeFilterLabels.length > 0 ? '검색 결과' : '전체'} {filteredEquipment.length}건
-                </div>
-                {activeFilterLabels.length > 0 ? (
-                  <div className="mt-0.5 text-sm text-muted-foreground">{activeFilterLabels.join(' · ')}</div>
-                ) : null}
-              </div>
-
-              <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto">{resultsListItems()}</div>
-            </>
-          </ResizableSidebar>
-        ) : (
-          // 좁은 화면에서는 사이드바 박스 대신, 지도 바로 위에 검색바 + 가로 스크롤 필터를
-          // 얹고 결과 목록은 다이얼로그로 뗀다 — 세로로 쌓이는 박스 하나가 더 늘어나는 느낌을 피한다.
-          // bleed 레이아웃이라 페이지 기본 좌우 여백이 없다 — 지도 쪽과 같은 clamp로 직접 줬었는데,
-          // 모바일 루트 폰트(14px)와 좁은 vw에서 clamp 하한(14px)에 붙어 거의 안 보여서 고정값으로 바꿨다.
-          // 이 행 전체는 사이드바 sticky 정렬을 위해 -mt-4로 상단 패딩이 이미 상쇄돼 있어
-          // (아래 지도 섹션이 pt-4로 되돌리는 것과 동일하게) 여기서도 직접 되돌려야 한다.
-          <div className="space-y-3 pt-6 pl-5 pr-3 sm:pt-5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="panel-title">장비 위치 검색</div>
-              <Badge variant="outline">추적 중 {equipment.length}개</Badge>
+  // 지도 — 3D는 받침 폭을 채우고(높이는 CSS), 2D는 평면도 비율 그대로
+  const mapView = showing3d ? (
+    <div className="staff-map staff-map--3d">
+      <Map3DBoundary onError={() => setMap3dFailed(true)}>
+        <Suspense
+          fallback={
+            <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+              3D 지도를 불러오는 중…
             </div>
-
-            <Input
-              placeholder="태그 ID, 장비명, 위치 검색"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-
-            <button
-              type="button"
-              aria-expanded={advancedSearchOpen}
-              onClick={() => setAdvancedSearchOpen((prev) => !prev)}
-              className="flex items-center gap-1 text-sm font-medium text-muted-foreground"
-            >
-              상세검색
-              {advancedSearchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-
-            {advancedSearchOpen ? (
-              <>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {typeFilterField(true)}
-                  {floorFilterField(true)}
-                  {locationFilterField(true)}
-                </div>
-
-                {toggleFilters()}
-              </>
-            ) : null}
-
-            {fetchError ? <div className="alert alert-error">{fetchError}</div> : null}
-
-            <Dialog open={resultsOpen} onOpenChange={setResultsOpen}>
-              <DialogTrigger asChild>
-                <button
-                  type="button"
-                  className="w-full rounded-md border border-border bg-card px-4 py-2.5 text-left text-base font-medium"
-                >
-                  {activeFilterLabels.length > 0 ? '검색 결과' : '전체'} {filteredEquipment.length}건 보기
-                </button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>
-                    {activeFilterLabels.length > 0 ? '검색 결과' : '전체'} {filteredEquipment.length}건
-                  </DialogTitle>
-                  {activeFilterLabels.length > 0 ? (
-                    <DialogDescription>{activeFilterLabels.join(' · ')}</DialogDescription>
-                  ) : null}
-                </DialogHeader>
-                <DialogBody className="space-y-0 p-0">{resultsListItems(() => setResultsOpen(false))}</DialogBody>
-              </DialogContent>
-            </Dialog>
-          </div>
-        )}
-
-        {/* 모바일에서는 이 섹션이 사이드바 없이 단독으로 좌측 벽에 붙어 있었다 — xl 미만에서만
-            좌우 여백을 직접 주고, xl 이상(사이드바와 나란히 배치)에서는 기존 그대로 되돌린다. */}
-        <div className="flex w-full min-w-0 flex-1 justify-center pt-4 pb-14 pl-5 pr-3 sm:pt-5 xl:pl-0 xl:pr-[clamp(1rem,2.5vw,2rem)]">
-          <div className="grid w-full max-w-[1360px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <section className="space-y-4 fade-rise-delay">
-              <div className="surface-panel p-5">
-                <div className="panel-header">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className={viewMode === 'map' ? 'app-nav-tab app-nav-tab--active' : 'app-nav-tab'}
-                      onClick={() => setViewMode('map')}
-                    >
-                      지도
-                    </button>
-                    <button
-                      type="button"
-                      className={viewMode === 'list' ? 'app-nav-tab app-nav-tab--active' : 'app-nav-tab'}
-                      onClick={() => setViewMode('list')}
-                    >
-                      목록
-                    </button>
-                  </div>
-                </div>
-
-                {viewMode === 'map' ? (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      {floorTabs}
-                      <div data-testid="map-dimension-toggle" className="flex border border-border">
-                        {(['2d', '3d'] as const).map((value) => (
-                          <button
-                            key={value}
-                            type="button"
-                            disabled={value === '3d' && !webglAvailable}
-                            title={
-                              value === '3d' && !webglAvailable ? '이 기기에서는 3D 보기를 쓸 수 없습니다' : undefined
-                            }
-                            aria-pressed={(value === '3d') === showing3d}
-                            className={`h-8 px-3 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
-                              (value === '3d') === showing3d
-                                ? 'bg-foreground font-semibold text-background'
-                                : 'text-muted-foreground'
-                            }`}
-                            onClick={() => chooseMapDimension(value)}
-                          >
-                            {value === '2d' ? '2D' : '3D'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {floorPins.length === 0 ? (
-                      <div className="empty-state">이 층에는 아직 배치된 구역이 없습니다.</div>
-                    ) : (
-                      <>
-                        {showing3d ? (
-                          <Map3DBoundary onError={() => setMap3dFailed(true)}>
-                            <Suspense
-                              fallback={
-                                <div
-                                  className="flex w-full items-center justify-center rounded-lg border border-border bg-muted text-sm text-muted-foreground"
-                                  style={{ aspectRatio: MAP_3D_ASPECT }}
-                                >
-                                  3D 지도를 불러오는 중…
-                                </div>
-                              }
-                            >
-                              <FloorMap3D
-                                floor={selectedFloor}
-                                pins={floorPins}
-                                equipment={floorEquipmentDots}
-                                onEquipmentClick={() => setSelectedEquipment(null)}
-                                zoneBounds={ZONE_BOUNDS}
-                                highlightedZone={highlightedZone}
-                                spotlightTagId={selectedEquipment}
-                                spotlightReaderIds={realReaderIdsOnFloor}
-                                onUnavailable={() => setMap3dFailed(true)}
-                              />
-                            </Suspense>
-                          </Map3DBoundary>
-                        ) : (
-                          <>
-                            {map3dFailed && mapDimension === '3d' ? (
-                              <div role="status" className="text-sm text-muted-foreground">
-                                3D 보기를 불러오지 못해 2D로 표시합니다.
-                              </div>
-                            ) : null}
-                            <FloorMapView
-                              floor={selectedFloor}
-                              pins={floorPins}
-                              equipment={floorEquipmentDots}
-                              // 지도 마커 클릭은 그 점의 이름표만 여는 동작 — 목록에서 건 강조는 함께 풀어준다.
-                              onEquipmentClick={() => setSelectedEquipment(null)}
-                              zoneBounds={ZONE_BOUNDS}
-                              highlightedZone={highlightedZone}
-                              spotlightTagId={selectedEquipment}
-                              spotlightReaderIds={realReaderIdsOnFloor}
-                            />
-                          </>
-                        )}
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full map-marker-ok" />
-                            사용 가능
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full map-marker-err" />
-                            대여 중
-                          </span>
-                          <span className="ml-auto">이미지 출처: 순천향대학교 천안병원</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {floorTabs}
-                    {locationPanels.length === 0 ? (
-                      <div className="empty-state">이 층에는 아직 수신된 RTLS 위치 데이터가 없습니다.</div>
-                    ) : (
-                      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                        {locationPanels.map((location) => {
-                          const roomItems = searchAndTypeFilteredEquipment.filter((eq) => eq.location === location);
-                          const readerForLocation = readers.find((r) => r.location === location);
-                          return (
-                            <section key={location} className="rounded-lg border border-border bg-card p-4">
-                              <div className="mb-4 flex items-center justify-between gap-3">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="text-[1.15rem]">{location}</h3>
-                                    {readerForLocation ? (
-                                      <span className={getOnlineDotClass(readerForLocation.is_online)} />
-                                    ) : null}
-                                  </div>
-                                  <p className="mt-1 text-base text-muted-foreground">{roomItems.length}개 장비 수신</p>
-                                </div>
-                                <Badge variant="outline">{location}</Badge>
-                              </div>
-                              <div className="space-y-2">
-                                {roomItems.length === 0 ? (
-                                  <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-base text-muted-foreground">
-                                    현재 태그 없음
-                                  </div>
-                                ) : (
-                                  roomItems.map((eq) => (
-                                    <button
-                                      key={eq.id}
-                                      type="button"
-                                      onClick={() => toggleSelectedEquipment(eq.id)}
-                                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-all ${
-                                        selectedEquipment === eq.id
-                                          ? 'border-foreground bg-secondary'
-                                          : 'border-border bg-card hover:bg-secondary'
-                                      }`}
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="truncate font-medium text-foreground">{eq.name}</div>
-                                        <div className="mt-1 text-sm text-muted-foreground" title={eq.id}>
-                                          {formatIBeaconTag(eq.id)}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <span className={getAssetStatusColor(eq.assetStatus)} />
-                                        <span className="whitespace-nowrap">{getAssetStatusLabel(eq.assetStatus)}</span>
-                                      </div>
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </section>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* 좁은 화면에서는 지도/목록으로 이미 구역별 장비를 볼 수 있어, 층별 구역 안내
-                패널까지 세로로 쌓이면 화면을 너무 많이 차지한다 — xl(사이드바가 나란히
-                배치되는 지점)부터만 보여준다. */}
-            <section className="hidden space-y-4 fade-rise-delay xl:block">
-              <div data-testid="zone-guide-panel" className="surface-panel surface-panel--muted p-5">
-                <div className="panel-header">
-                  <div>
-                    <div className="panel-title">{FLOOR_MAPS.find((f) => f.floor === selectedFloor)?.label ?? ''}</div>
-                  </div>
-                </div>
-
-                {zoneGuideRows.length === 0 ? (
-                  <div className="empty-state">이 층에 안내할 구역이 없습니다.</div>
-                ) : (
-                  <div className="flex flex-col">
-                    {zoneGuideRows.map((zone) => (
-                      <button
-                        key={zone.id}
-                        type="button"
-                        onClick={() => handleZoneGuideClick(zone)}
-                        className={`flex w-full items-center justify-between gap-3 border-b border-border px-3 py-2 text-left text-sm transition-all last:border-b-0 ${
-                          highlightedZone?.id === zone.id
-                            ? 'border-l-2 border-l-foreground bg-secondary'
-                            : 'border-l-2 border-l-transparent hover:bg-secondary'
-                        }`}
-                      >
-                        <span className="truncate">{zone.name}</span>
-                        {zone.hasReader ? (
-                          <span className="shrink-0 text-muted-foreground">{zone.equipmentCount}개</span>
-                        ) : (
-                          <span className="shrink-0 text-xs text-muted-foreground">편의시설</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
+          }
+        >
+          <FloorMap3D
+            floor={selectedFloor}
+            pins={floorPins}
+            equipment={floorEquipmentDots}
+            onEquipmentClick={() => setSelectedEquipment(null)}
+            zoneBounds={ZONE_BOUNDS}
+            highlightedZone={highlightedZone}
+            spotlightTagId={selectedEquipment}
+            spotlightReaderIds={realReaderIdsOnFloor}
+            onUnavailable={() => setMap3dFailed(true)}
+          />
+        </Suspense>
+      </Map3DBoundary>
+    </div>
+  ) : (
+    <div className="staff-map staff-map--2d">
+      {map3dFailed && mapDimension === '3d' ? (
+        <div role="status" className="staff-empty staff-empty--inline">
+          3D 보기를 불러오지 못해 2D로 표시합니다.
         </div>
+      ) : null}
+      <FloorMapView
+        floor={selectedFloor}
+        pins={floorPins}
+        equipment={floorEquipmentDots}
+        // 지도 마커 클릭은 그 점의 이름표만 여는 동작 — 목록에서 건 강조는 함께 풀어준다.
+        onEquipmentClick={() => setSelectedEquipment(null)}
+        zoneBounds={ZONE_BOUNDS}
+        highlightedZone={highlightedZone}
+        spotlightTagId={selectedEquipment}
+        spotlightReaderIds={realReaderIdsOnFloor}
+      />
+    </div>
+  );
+
+  // 목록 보기 — 한 줄에 구역 하나, 구역 안 장비는 가로 칸. 층 단추만 따른다(사이드바 층 필터와 무관)
+  const listView =
+    locationPanels.length === 0 ? (
+      <div className="staff-empty">이 층에는 아직 수신된 위치 데이터가 없습니다.</div>
+    ) : (
+      <div className="staff-groups">
+        {locationPanels.map((location) => {
+          const roomItems = searchAndTypeFilteredEquipment.filter((eq) => eq.location === location);
+          const reader = readers.find((r) => r.location === location);
+          return (
+            <section key={location}>
+              <header className="staff-group__head">
+                <h3 className="staff-group__name">
+                  {reader ? <span className={reader.is_online ? 'staff-led' : 'staff-led staff-led--warn'} /> : null}
+                  {location}
+                </h3>
+                <span className="staff-num">{roomItems.length}</span>
+              </header>
+              {roomItems.length === 0 ? (
+                <div className="staff-group__none">현재 장비 없음</div>
+              ) : (
+                <div className="staff-group__items">
+                  {roomItems.map((eq) => (
+                    <button
+                      key={eq.id}
+                      type="button"
+                      title={eq.id}
+                      aria-pressed={selectedEquipment === eq.id}
+                      className={selectedEquipment === eq.id ? 'staff-row staff-row--on' : 'staff-row'}
+                      onClick={() => toggleSelectedEquipment(eq.id)}
+                    >
+                      {/* 태그는 공유 uuid 대신 major·minor로 구분한다 */}
+                      <span className="staff-row__main">
+                        <span className="staff-row__name">{eq.name}</span>
+                        <span className="staff-row__sub">{formatIBeaconTag(eq.id)}</span>
+                      </span>
+                      <span className="staff-row__status">
+                        <span className={statusLedClass(eq.assetStatus)} />
+                        {getAssetStatusLabel(eq.assetStatus)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
       </div>
-    </AppShell>
+    );
+
+  // 지도 패널 — 지도/목록 전환, 2D/3D 전환, 받침, 층 단추, 범례
+  const mapPanel = (
+    <section className="staff-panel">
+      <div className="staff-equip__bar">
+        <PillToggle
+          label="보기"
+          value={viewMode}
+          options={[
+            { value: 'map', label: '지도' },
+            { value: 'list', label: '목록' },
+          ]}
+          onChange={setViewMode}
+        />
+        {viewMode === 'map' ? (
+          <PillToggle
+            small
+            label="지도 차원"
+            testId="map-dimension-toggle"
+            value={showing3d ? '3d' : '2d'}
+            options={[
+              { value: '2d', label: '2D' },
+              {
+                value: '3d',
+                label: '3D',
+                disabled: !webglAvailable,
+                title: webglAvailable ? undefined : '이 기기에서는 3D 보기를 쓸 수 없습니다',
+              },
+            ]}
+            onChange={chooseMapDimension}
+          />
+        ) : null}
+      </div>
+      <div className={isDesktop ? 'staff-equip__stage' : 'staff-equip__stage staff-equip__stage--stacked'}>
+        <div className="staff-tray">
+          {viewMode === 'list' ? (
+            listView
+          ) : floorPins.length === 0 ? (
+            <div className="staff-empty">이 층에는 아직 배치된 구역이 없습니다.</div>
+          ) : (
+            mapView
+          )}
+        </div>
+        {floorButtons(!isDesktop)}
+      </div>
+      {viewMode === 'map' && floorPins.length > 0 ? (
+        <div className="staff-equip__foot">
+          <div className="staff-legend">
+            <span>
+              <span className="staff-led" /> 사용 가능
+            </span>
+            <span>
+              <span className="staff-led staff-led--busy" /> 대여 중
+            </span>
+          </div>
+          <span className="staff-credit">이미지 출처: 순천향대학교 천안병원</span>
+        </div>
+      ) : null}
+    </section>
+  );
+
+  // 구역 패널(넓은 화면만) — 장비 추적 구역은 대수와 함께 누르면 지도 강조, 편의시설은 안내 글자만
+  const trackedZones = zoneGuideRows.filter((zone) => zone.hasReader);
+  const amenityZones = zoneGuideRows.filter((zone) => !zone.hasReader);
+  const zonePanel = (
+    <aside data-testid="zone-guide-panel" className="staff-panel staff-equip__zones" aria-label="구역 안내">
+      <h2 className="staff-title staff-equip__zones-title">{selectedFloor}F</h2>
+      <div className="staff-subhead">장비 추적 구역</div>
+      {trackedZones.length === 0 ? (
+        <div className="staff-empty staff-empty--inline">없음</div>
+      ) : (
+        trackedZones.map((zone) => (
+          <button
+            key={zone.id}
+            type="button"
+            aria-pressed={highlightedZone?.id === zone.id}
+            className={highlightedZone?.id === zone.id ? 'staff-zone staff-zone--on' : 'staff-zone'}
+            onClick={() => handleZoneGuideClick(zone)}
+          >
+            <span className="truncate">{zone.name}</span>
+            <span
+              className={zone.equipmentCount === 0 ? 'staff-zone__count staff-zone__count--zero' : 'staff-zone__count'}
+            >
+              {zone.equipmentCount}대
+            </span>
+          </button>
+        ))
+      )}
+      {/* 편의시설이 없는 층은 제목째 숨긴다 */}
+      {amenityZones.length > 0 ? (
+        <>
+          <div className="staff-subhead">편의시설</div>
+          <ul className="staff-amenities">
+            {amenityZones.map((zone) => (
+              // 긴 이름은 두 칸을 다 쓴다
+              <li
+                key={zone.id}
+                className={zone.name.length > 7 ? 'staff-amenity staff-amenity--wide' : 'staff-amenity'}
+              >
+                {zone.name}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </aside>
+  );
+
+  // 넓은 화면 사이드바 — 제목·추적 중, 검색, 필터, 스위치, 결과 요약, 결과 목록
+  const sidebar = (
+    <div data-testid="equipment-sidebar" className="staff-sidebar__body">
+      <div className="staff-equip__head">
+        <h1 className="staff-title">장비 검색</h1>
+        <span className="staff-live" title="1초마다 갱신">
+          <span className="staff-led staff-led--live" />
+          추적 중 <span className="staff-num">{equipment.length}</span>
+        </span>
+      </div>
+      {searchField}
+      <div className="staff-fields">
+        {typeFilterField(false)}
+        {floorFilterField(false)}
+        {locationFilterField(false)}
+      </div>
+      {toggleFilters}
+      {fetchError ? <div className="staff-alert">{fetchError}</div> : null}
+      <div data-testid="equipment-result-summary" className="staff-summary">
+        <span>{resultTitle}</span>
+        {activeFilterLabels.length > 0 ? (
+          <span className="staff-summary__meta">{activeFilterLabels.join(' · ')}</span>
+        ) : null}
+      </div>
+      <div className="staff-well staff-equip__list">{resultsListItems()}</div>
+    </div>
+  );
+
+  if (isDesktop) {
+    return (
+      <StaffShell menu="staff" current="equipment" sidebar={sidebar} sidebarLabel="장비 검색 패널">
+        <div className="staff-equip">
+          {mapPanel}
+          {zonePanel}
+        </div>
+      </StaffShell>
+    );
+  }
+
+  // 좁은 화면 — 사이드바 대신 위에 검색칸·상세검색·결과 단추, 결과 목록은 창으로 뗀다.
+  // 구역 패널은 지도·목록으로 이미 구역별 장비를 볼 수 있어 숨긴다.
+  return (
+    <StaffShell menu="staff" current="equipment">
+      <div className="staff-equip__mobile">
+        <div className="staff-equip__head">
+          <h1 className="staff-title">장비 검색</h1>
+          <span className="staff-live">
+            <span className="staff-led staff-led--live" />
+            추적 중 <span className="staff-num">{equipment.length}</span>
+          </span>
+        </div>
+        {searchField}
+        <button
+          type="button"
+          aria-expanded={advancedSearchOpen}
+          onClick={() => setAdvancedSearchOpen((prev) => !prev)}
+          className="staff-link-btn"
+        >
+          상세검색
+          {advancedSearchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+        {advancedSearchOpen ? (
+          <>
+            <div className="staff-fields staff-equip__filter-row">
+              {typeFilterField(true)}
+              {floorFilterField(true)}
+              {locationFilterField(true)}
+            </div>
+            {toggleFilters}
+          </>
+        ) : null}
+        {fetchError ? <div className="staff-alert">{fetchError}</div> : null}
+        <Dialog open={resultsOpen} onOpenChange={setResultsOpen}>
+          <DialogTrigger asChild>
+            <button type="button" className="staff-results-btn">
+              {resultTitle} 보기
+            </button>
+          </DialogTrigger>
+          <DialogContent className="staff-tokens">
+            <DialogHeader>
+              <DialogTitle>{resultTitle}</DialogTitle>
+              {activeFilterLabels.length > 0 ? (
+                <DialogDescription>{activeFilterLabels.join(' · ')}</DialogDescription>
+              ) : null}
+            </DialogHeader>
+            <DialogBody className="space-y-0 p-0">{resultsListItems(() => setResultsOpen(false))}</DialogBody>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <div className="staff-equip">{mapPanel}</div>
+    </StaffShell>
   );
 }

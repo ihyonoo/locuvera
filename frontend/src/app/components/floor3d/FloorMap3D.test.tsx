@@ -73,7 +73,7 @@ describe('FloorMap3D', () => {
 
   it('offers the label toggle but no reset-view button', () => {
     render(<FloorMap3D {...props()} />);
-    expect(screen.getByRole('checkbox', { name: '이름표' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '장비 이름 표시' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '시점 초기화' })).not.toBeInTheDocument();
   });
 });
