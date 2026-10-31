@@ -24,7 +24,7 @@ export default function Pagination({ page, pageSize, totalItems, onPageChange, o
           <SelectTrigger aria-label="페이지당 개수" className="w-32">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {PAGE_SIZE_OPTIONS.map((option) => (
               <SelectItem key={option} value={String(option)}>
                 {option}개씩

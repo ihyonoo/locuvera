@@ -2,11 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import AppShell from '../components/layout/AppShell';
-import AdminNav from '../components/layout/AdminNav';
-import ResizableSidebar from '../components/layout/ResizableSidebar';
+import StaffShell from '../components/layout/StaffShell';
+import { ToggleSwitch } from '../components/layout/staffControls';
 import Pagination from '../components/ui/Pagination';
 import { DEFAULT_PAGE_SIZE } from '../lib/pagination';
 import { formatIBeaconTag } from '../lib/iBeaconTag';
@@ -27,10 +25,13 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
+  Clock3,
   Copy,
   HelpCircle,
   Loader2,
+  MapPin,
   Printer,
   User,
 } from 'lucide-react';
@@ -177,17 +178,9 @@ function buildHistoryParams(query: HistoryQuery, { includeBlockchain }: { includ
 /** 조회 중 결과 카드 자리를 대신 채우는 자리표시자. 개수는 첫 페이지가 비어 보이지 않을 만큼만. */
 function HistorySkeleton() {
   return (
-    <div
-      data-testid="history-skeleton"
-      role="status"
-      aria-label="사용 이력을 불러오는 중입니다"
-      className="space-y-2.5"
-    >
+    <div data-testid="history-skeleton" role="status" aria-label="사용 이력을 불러오는 중입니다" className="space-y-4">
       {/* 조회가 느린 이유를 설명해 둔다 — 단순 DB 조회가 아니라 기록마다 체인을 되짚는 작업이다. */}
-      <div
-        data-testid="history-loading-notice"
-        className="flex items-start gap-3 border border-border/70 bg-secondary/40 px-5 py-4"
-      >
+      <div data-testid="history-loading-notice" className="flex items-start gap-3 rounded-xl bg-secondary px-5 py-4">
         <Loader2 className="mt-1 h-5 w-5 shrink-0 animate-spin text-primary" />
         <div>
           <div className="text-[1.1rem] font-semibold tracking-[-0.02em] text-foreground">
@@ -200,22 +193,21 @@ function HistorySkeleton() {
         </div>
       </div>
 
-      {/* 결과 행과 같은 두 줄 높이로 맞춘다 — 다르면 로딩에서 결과로 넘어갈 때 화면이 크게 튄다 */}
+      {/* 결과와 같은 머리글·세 열 구조 */}
       {Array.from({ length: 8 }, (_, index) => (
-        <div
-          key={index}
-          data-testid="history-skeleton-card"
-          className="relative flex flex-col gap-1 overflow-hidden border border-border bg-card py-2.5 pl-5 pr-4"
-        >
-          <div className="skeleton absolute left-0 top-0 h-full w-1.5 border-0" />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="skeleton h-5 w-40" />
-              <div className="skeleton h-4 w-48" />
+        <div key={index} data-testid="history-skeleton-card" className="staff-usage-row">
+          <div className="staff-usage-row__head">
+            <div className="staff-usage-row__identity">
+              <div className="skeleton h-5 w-40 max-w-full" />
+              <div className="skeleton h-3 w-48 max-w-full" />
             </div>
-            <div className="skeleton h-6 w-24" />
+            <div className="skeleton h-4 w-20 shrink-0" />
           </div>
-          <div className="skeleton h-4 w-3/4" />
+          <div className="staff-usage-row__details">
+            <div className="skeleton h-4 w-4/5" />
+            <div className="skeleton h-4 w-4/5" />
+            <div className="skeleton h-4 w-full" />
+          </div>
         </div>
       ))}
     </div>
@@ -326,20 +318,18 @@ function getStatusTone(status: string) {
   return 'tone-err';
 }
 
-function getVerificationCardTone(status: string) {
-  if (status === 'verified') return 'solid-ok';
-  if (status === 'not_eligible') return 'solid-neutral';
-  if (status === 'chain_error' || status === 'not_configured') return 'solid-warn';
-  return 'solid-err';
-}
-
-/** 상태 뱃지. 글자만 둔다 — 라벨이 상태를 다 말하고, 톤 색이 강약을 준다. */
-function VerificationStatusPill({ status, label }: { status: string; label: string }) {
+// 목록·증명서의 검증 상태
+function VerificationStatus({ status, label }: { status: string; label: string }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[0.82rem] font-semibold ${getStatusTone(status)}`}
-    >
-      {label}
+    <span className={`staff-verification ${getStatusTone(status)}`} title={label}>
+      {status === 'verified' ? (
+        <>
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+          검증 완료
+        </>
+      ) : (
+        label
+      )}
     </span>
   );
 }
@@ -476,7 +466,7 @@ function RecordTimeline({ item }: { item: UsageHistoryItem }) {
   );
 }
 
-/** 목록의 한 건. 두 줄로 압축하고, 온체인 원문·머클 값은 팝업에만 둔다. */
+// 장비·검증 상태를 먼저, 사용자·경로·시간은 아래에 정렬
 function UsageHistoryRow({ item, onOpen }: { item: UsageHistoryItem; onOpen: () => void }) {
   const blockchain = item.blockchain;
   const blockNumber = blockchain?.anchor?.block_number ?? null;
@@ -485,41 +475,46 @@ function UsageHistoryRow({ item, onOpen }: { item: UsageHistoryItem; onOpen: () 
   const verificationLabel = blockchain?.verification_label ?? '검증 중 오류';
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="relative flex w-full flex-col gap-1 overflow-hidden border border-border bg-card py-2.5 pl-5 pr-4 text-left transition-colors hover:bg-secondary/50"
-    >
-      <span className={`absolute left-0 top-0 h-full w-1.5 ${getVerificationCardTone(verificationStatus)}`} />
-
-      <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="flex flex-wrap items-baseline gap-x-2.5">
-          <span className="text-[1.05rem] font-semibold tracking-[-0.03em] text-foreground">{item.equipment.name}</span>
-          <span className="text-[0.88rem] text-muted-foreground">
+    <button type="button" onClick={onOpen} className="staff-usage-row">
+      <span className="staff-usage-row__head">
+        <span className="staff-usage-row__identity">
+          <span className="staff-usage-row__name">{item.equipment.name}</span>
+          <span className="staff-usage-row__meta">
             #{item.usage_id} · {formatIBeaconTag(item.equipment.tag_id)}
           </span>
         </span>
-        <span className="flex flex-wrap items-center justify-end gap-1.5">
-          {typeof blockNumber === 'number' ? <Badge variant="outline">Block {blockNumber}</Badge> : null}
-          {typeof transactionIndex === 'number' ? <Badge variant="outline">Tx #{transactionIndex}</Badge> : null}
-          <VerificationStatusPill status={verificationStatus} label={verificationLabel} />
+        <span className="staff-usage-row__verification">
+          <span className="staff-usage-row__status">
+            <VerificationStatus status={verificationStatus} label={verificationLabel} />
+            <ChevronRight aria-hidden="true" />
+          </span>
+          {typeof blockNumber === 'number' || typeof transactionIndex === 'number' ? (
+            <span className="staff-usage-row__meta">
+              {typeof blockNumber === 'number' ? `Block ${blockNumber}` : null}
+              {typeof blockNumber === 'number' && typeof transactionIndex === 'number' ? ' · ' : null}
+              {typeof transactionIndex === 'number' ? `Tx #${transactionIndex}` : null}
+            </span>
+          ) : null}
         </span>
       </span>
 
-      <span className="flex flex-wrap items-center gap-x-2 text-[0.9rem] leading-5 text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <User className="h-3.5 w-3.5 shrink-0" />
-          {formatPerson(item.user.name, item.user.department)} →{' '}
-          {formatPerson(item.returned_by.name, item.returned_by.department)}
+      <span className="staff-usage-row__details">
+        <span className="staff-usage-row__field" title="대여자">
+          <User aria-hidden="true" />
+          <span>{formatPerson(item.user.name, item.user.department)}</span>
         </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {getLocationLabel(item.checkout.location, item.checkout.reader_id)} →{' '}
-          {getLocationLabel(item.return.location, item.return.reader_id)}
+        <span className="staff-usage-row__field">
+          <MapPin aria-hidden="true" />
+          <span>
+            {getLocationLabel(item.checkout.location, item.checkout.reader_id)} →{' '}
+            {getLocationLabel(item.return.location, item.return.reader_id)}
+          </span>
         </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {formatCompactDateTime(item.checkout.at)} ~ {formatCompactDateTime(item.return.at)}
+        <span className="staff-usage-row__field">
+          <Clock3 aria-hidden="true" />
+          <span>
+            {formatCompactDateTime(item.checkout.at)} ~ {formatCompactDateTime(item.return.at)}
+          </span>
         </span>
       </span>
     </button>
@@ -535,7 +530,7 @@ function CsvProgressDialog({ progress }: { progress: { received: number; total: 
   return (
     <Dialog open={Boolean(progress)}>
       <DialogContent
-        className="csv-progress max-w-md"
+        className="staff-tokens staff-work staff-work-dialog csv-progress max-w-md"
         // 닫아도 작업은 계속 돌아 화면에만 안 보이게 된다 — 아예 닫히지 않게 막는다.
         onEscapeKeyDown={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -589,7 +584,7 @@ function UsageDetailDialog({ item, onClose }: { item: UsageHistoryItem | null; o
   return (
     <Dialog open={Boolean(item)} onOpenChange={(open) => (open ? undefined : onClose())}>
       {/* 온체인 해시가 길어 기본 max-w-2xl에서는 줄바꿈이 심하다 */}
-      <DialogContent className="certificate max-w-4xl" aria-describedby={undefined}>
+      <DialogContent className="staff-tokens certificate max-w-4xl" aria-describedby={undefined}>
         {item ? (
           <>
             <DialogHeader className="certificate__header pr-12">
@@ -599,7 +594,7 @@ function UsageDetailDialog({ item, onClose }: { item: UsageHistoryItem | null; o
                   <span className="certificate__meta-label">문서번호</span>
                   <span className="certificate__meta-value">{formatDocumentNumber(item.usage_id)}</span>
                 </div>
-                <VerificationStatusPill status={verificationStatus} label={verificationLabel} />
+                <VerificationStatus status={verificationStatus} label={verificationLabel} />
               </div>
             </DialogHeader>
 
@@ -956,7 +951,7 @@ export default function IntegrityVerification() {
           <SelectTrigger>
             <SelectValue placeholder="대여 위치 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             <SelectItem value="all">전체 위치</SelectItem>
             {locationOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
@@ -975,7 +970,7 @@ export default function IntegrityVerification() {
           <SelectTrigger>
             <SelectValue placeholder="반납 위치 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             <SelectItem value="all">전체 위치</SelectItem>
             {locationOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
@@ -1009,7 +1004,7 @@ export default function IntegrityVerification() {
           <SelectTrigger>
             <SelectValue placeholder="정렬 기준 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {SORT_FIELD_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -1024,7 +1019,7 @@ export default function IntegrityVerification() {
           <SelectTrigger>
             <SelectValue placeholder="정렬 방향 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {SORT_ORDER_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -1060,115 +1055,93 @@ export default function IntegrityVerification() {
     return null;
   }
 
+  const sidebar = isDesktop ? (
+    <div className="staff-sidebar__body staff-work" data-testid="verification-sidebar">
+      <h1 className="staff-title">검색 조건</h1>
+      <form onSubmit={onSubmit} className="staff-work__search-form">
+        <div className="min-h-0 space-y-3 overflow-y-auto">{renderSearchFields()}</div>
+      </form>
+      {error ? <div className="staff-alert">{error}</div> : null}
+    </div>
+  ) : undefined;
+
   return (
-    <AppShell bleed actions={<AdminNav active="verification" />} contentClassName="pt-4 sm:pt-5">
-      {/* 사이드바를 상하 꽉 채우기 위해, AppShell 공용 상하 패딩(contentClassName="pt-4 sm:pt-5" +
-          .app-shell__content의 3.5rem 하단 패딩)을 이 행 전체에서 걷어내고, 사이드바가 아닌
-          나머지(이력 목록) 쪽에만 그 패딩을 되돌려준다. */}
-      {/* xl:items-start — 자식이 stretch로 늘어나면 사이드바의 sticky가 동작하지 않는다 */}
-      <div className="-mt-4 -mb-14 flex w-full flex-col gap-4 sm:-mt-5 xl:flex-row xl:items-start">
-        {isDesktop ? (
-          <ResizableSidebar testId="verification-sidebar">
-            <>
-              <div className="panel-header shrink-0">
-                <div>
-                  <div className="panel-title">검색 조건</div>
-                </div>
-              </div>
-
-              {/* 조건이 많아 사이드바를 넘치므로 필드는 스크롤시키되, 버튼 줄은 패널 하단에 고정하지 않고
-                  마지막 필드 바로 아래에 이어 붙인다. */}
-              <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">{renderSearchFields()}</div>
-              </form>
-
-              {error ? <div className="alert alert-error mt-4 shrink-0">{error}</div> : null}
-            </>
-          </ResizableSidebar>
-        ) : (
-          // 좁은 화면에서는 사이드바 박스 대신, 결과 목록 위에 "상세검색" 토글로 접힌 폼을 둔다.
-          <div className="space-y-3 pt-6 pl-5 pr-3 sm:pt-5">
-            <div className="panel-title">검색 조건</div>
-
-            <button
-              type="button"
-              aria-expanded={advancedSearchOpen}
-              onClick={() => setAdvancedSearchOpen((prev) => !prev)}
-              className="flex items-center gap-1 text-sm font-medium text-muted-foreground"
-            >
-              상세검색
-              {advancedSearchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-
+    <StaffShell menu="admin" current="verification" sidebar={sidebar} sidebarLabel="장비 사용 이력 검색 패널">
+      <div className="staff-work staff-work__content staff-usage">
+        {!isDesktop ? (
+          <section className="staff-panel staff-work__filters">
+            <div className="staff-panel__head">
+              <h2 className="staff-panel__title">검색 조건</h2>
+              <button
+                type="button"
+                aria-expanded={advancedSearchOpen}
+                onClick={() => setAdvancedSearchOpen((prev) => !prev)}
+                className="staff-link-btn"
+              >
+                상세검색
+                {advancedSearchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            </div>
             {advancedSearchOpen ? (
-              <form onSubmit={onSubmit} className="space-y-3">
+              <form onSubmit={onSubmit} className="staff-work__fields">
                 {renderSearchFields()}
               </form>
             ) : null}
+            {error ? <div className="staff-alert">{error}</div> : null}
+          </section>
+        ) : null}
 
-            {error ? <div className="alert alert-error">{error}</div> : null}
-          </div>
-        )}
-
-        {/* 모바일에서는 이 섹션이 사이드바 없이 단독으로 좌측 벽에 붙어 있었다 — xl 미만에서만
-            좌우 여백을 직접 주고, xl 이상(사이드바와 나란히 배치)에서는 기존 그대로 되돌린다. */}
-        <div className="flex w-full min-w-0 flex-1 justify-center pt-4 pb-14 pl-5 pr-3 sm:pt-5 xl:pl-0 xl:pr-[clamp(1rem,2.5vw,2rem)]">
-          <div className="w-full max-w-[1360px]">
-            <section className="surface-panel p-5 fade-rise-delay">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-title">장비 사용 이력</div>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={query.hideSimulated}
-                      onChange={(event) =>
-                        setQuery((prev) => ({ ...prev, hideSimulated: event.target.checked, page: 1 }))
-                      }
-                    />
-                    시뮬레이션 데이터 숨기기
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={query.includeInUse}
-                      onChange={(event) =>
-                        setQuery((prev) => ({ ...prev, includeInUse: event.target.checked, page: 1 }))
-                      }
-                    />
-                    사용 중인 이력 포함
-                  </label>
-                  <Badge variant="outline">이 페이지 검증 완료 {pageVerifiedCount}건</Badge>
-                  <Badge variant="outline">검증 실패 {pageIssueCount}건</Badge>
-                </div>
+        <section className="staff-panel staff-work__panel staff-usage__panel">
+          <div className="staff-work__heading">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <h1 className="staff-title">의료 장비 사용 이력</h1>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="staff-note">
+                  이 페이지 검증 완료 <strong className="staff-num">{pageVerifiedCount}</strong>건
+                </span>
+                <span className="staff-note">
+                  검증 실패 <strong className="staff-num">{pageIssueCount}</strong>건
+                </span>
               </div>
-
-              <div className="space-y-2.5">
-                {isLoading ? (
-                  <HistorySkeleton />
-                ) : items.length === 0 ? (
-                  <div className="empty-state">조회된 사용 이력이 없습니다.</div>
-                ) : (
-                  items.map((item) => (
-                    <UsageHistoryRow key={item.usage_id} item={item} onOpen={() => setDetailUsageId(item.usage_id)} />
-                  ))
-                )}
-              </div>
-
-              {total > 0 ? (
-                <Pagination
-                  page={query.page}
-                  pageSize={query.pageSize}
-                  totalItems={total}
-                  onPageChange={(nextPage) => setQuery((prev) => ({ ...prev, page: nextPage }))}
-                  onPageSizeChange={(nextSize) => setQuery((prev) => ({ ...prev, pageSize: nextSize, page: 1 }))}
-                />
-              ) : null}
-            </section>
+            </div>
+            <div className="staff-work__tools">
+              <ToggleSwitch
+                checked={query.hideSimulated}
+                onChange={(checked) => setQuery((prev) => ({ ...prev, hideSimulated: checked, page: 1 }))}
+              >
+                시뮬레이션 데이터 숨기기
+              </ToggleSwitch>
+              <ToggleSwitch
+                checked={query.includeInUse}
+                onChange={(checked) => setQuery((prev) => ({ ...prev, includeInUse: checked, page: 1 }))}
+              >
+                사용 중인 이력 포함
+              </ToggleSwitch>
+            </div>
           </div>
-        </div>
+
+          <div className="staff-usage__list">
+            {isLoading ? (
+              <HistorySkeleton />
+            ) : items.length === 0 ? (
+              <div className="staff-empty-block">조회된 사용 이력이 없습니다.</div>
+            ) : (
+              items.map((item) => (
+                <UsageHistoryRow key={item.usage_id} item={item} onOpen={() => setDetailUsageId(item.usage_id)} />
+              ))
+            )}
+          </div>
+
+          {total > 0 ? (
+            <Pagination
+              page={query.page}
+              pageSize={query.pageSize}
+              totalItems={total}
+              onPageChange={(nextPage) => setQuery((prev) => ({ ...prev, page: nextPage }))}
+              onPageSizeChange={(nextSize) => setQuery((prev) => ({ ...prev, pageSize: nextSize, page: 1 }))}
+            />
+          ) : null}
+        </section>
       </div>
 
       <UsageDetailDialog
@@ -1177,6 +1150,6 @@ export default function IntegrityVerification() {
       />
 
       <CsvProgressDialog progress={csvProgress} />
-    </AppShell>
+    </StaffShell>
   );
 }

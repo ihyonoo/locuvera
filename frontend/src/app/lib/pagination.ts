@@ -1,6 +1,6 @@
 // 관리자 목록의 클라이언트 사이드 페이징. 목록 데이터는 이미 전부 받아둔 상태라
 // 페이지 전환은 슬라이스만 바꾸면 된다(재조회 없음).
-export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+export const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100];
 
 export const DEFAULT_PAGE_SIZE = 10;
 

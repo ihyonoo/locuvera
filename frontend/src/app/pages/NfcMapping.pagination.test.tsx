@@ -71,10 +71,11 @@ describe('NfcMapping pagination', () => {
 
     await screen.findByText('장비 01');
     expect(visibleEquipmentNames()).toHaveLength(10);
+    expect(screen.getByRole('combobox', { name: '페이지당 개수' })).toHaveTextContent('10개씩');
     expect(screen.queryByText('장비 11')).not.toBeInTheDocument();
   });
 
-  it('shows the remaining equipment on the next page', async () => {
+  it('shows the remaining equipment on the last page', async () => {
     renderPage();
 
     await screen.findByText('장비 01');

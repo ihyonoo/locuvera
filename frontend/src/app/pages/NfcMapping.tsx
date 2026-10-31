@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import AppShell from '../components/layout/AppShell';
-import AdminNav from '../components/layout/AdminNav';
-import ResizableSidebar from '../components/layout/ResizableSidebar';
+import StaffShell from '../components/layout/StaffShell';
+import { ToggleSwitch } from '../components/layout/staffControls';
 import Pagination from '../components/ui/Pagination';
 import { clampPage, DEFAULT_PAGE_SIZE, getPageSlice, getTotalPages } from '../lib/pagination';
 import { Button } from '../components/ui/button';
@@ -204,7 +203,7 @@ function MappingGuideDialog() {
           매핑 가이드
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="staff-tokens staff-work staff-work-dialog">
         <DialogHeader>
           <DialogTitle>NFC 매핑 가이드</DialogTitle>
           <DialogDescription>NFC 태그를 만들어 장비에 붙이기까지의 절차입니다.</DialogDescription>
@@ -525,7 +524,7 @@ export default function NfcMapping() {
           <SelectTrigger aria-label="장비 유형">
             <SelectValue placeholder="유형 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             <SelectItem value="all">전체 유형</SelectItem>
             {typeOptions.map((option) => (
               <SelectItem key={option} value={option}>
@@ -545,7 +544,7 @@ export default function NfcMapping() {
           <SelectTrigger aria-label="매핑 상태">
             <SelectValue placeholder="매핑 상태 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {MAPPING_STATE_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -569,7 +568,7 @@ export default function NfcMapping() {
           <SelectTrigger aria-label="major 정렬">
             <SelectValue placeholder="major 정렬 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {DIRECTION_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -591,7 +590,7 @@ export default function NfcMapping() {
           <SelectTrigger aria-label="minor 정렬">
             <SelectValue placeholder="minor 정렬 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {DIRECTION_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -618,7 +617,7 @@ export default function NfcMapping() {
           <SelectTrigger aria-label="등록 시각 정렬">
             <SelectValue placeholder="등록 시각 정렬 선택" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="staff-tokens staff-work">
             {CREATED_AT_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -635,66 +634,51 @@ export default function NfcMapping() {
     return null;
   }
 
+  const sidebar = isDesktop ? (
+    <div className="staff-sidebar__body staff-work" data-testid="nfc-mapping-sidebar">
+      <h1 className="staff-title">매핑 검색</h1>
+      <form onSubmit={onSearch} className="staff-work__search-form">
+        <div className="min-h-0 space-y-3 overflow-y-auto">
+          {renderSearchFields()}
+          <div className="staff-actions pt-3">
+            <Button type="submit" className="flex-1">
+              <Search className="h-4 w-4" />
+              검색
+            </Button>
+            <Button type="button" variant="outline" onClick={onResetFilters}>
+              초기화
+            </Button>
+          </div>
+        </div>
+      </form>
+      <div className="staff-work__guide">
+        <MappingGuideDialog />
+      </div>
+    </div>
+  ) : undefined;
+
   return (
-    <AppShell bleed actions={<AdminNav active="nfc-mapping" />} contentClassName="pt-4 sm:pt-5">
-      {/* 사이드바를 상하 꽉 채우기 위해, AppShell 공용 상하 패딩(contentClassName="pt-4 sm:pt-5" +
-          .app-shell__content의 3.5rem 하단 패딩)을 이 행 전체에서 걷어내고, 사이드바가 아닌
-          나머지(매핑 목록) 쪽에만 그 패딩을 되돌려준다. */}
-      {/* xl:items-start — 자식이 stretch로 늘어나면 사이드바의 sticky가 동작하지 않는다 */}
-      <div className="-mt-4 -mb-14 flex w-full flex-col gap-4 sm:-mt-5 xl:flex-row xl:items-start">
-        {isDesktop ? (
-          <ResizableSidebar testId="nfc-mapping-sidebar">
-            <>
-              <div className="panel-header shrink-0">
-                <div>
-                  <div className="panel-title">매핑 검색</div>
-                </div>
-              </div>
-
-              {/* 조건을 항목별로 나눠 무엇으로 좁힐 수 있는지 한눈에 보이게 한다.
-                  버튼은 마지막 필드 바로 아래에 붙인다 — 패널 바닥으로 내리면 필드와 멀어져 따로 논다. */}
-              <form onSubmit={onSearch} className="flex min-h-0 shrink flex-col">
-                <div className="min-h-0 space-y-3 overflow-y-auto pr-1">{renderSearchFields()}</div>
-
-                <div className="mt-4 flex shrink-0 gap-2">
-                  <Button type="submit" className="flex-1">
-                    <Search className="h-4 w-4" />
-                    검색
-                  </Button>
-                  <Button type="button" variant="outline" onClick={onResetFilters}>
-                    초기화
-                  </Button>
-                </div>
-              </form>
-
-              {/* 남는 세로 공간은 여기서 흡수해, 가이드 버튼만 패널 바닥에 남는다. */}
-              <div className="min-h-4 flex-1" />
-
-              <div className="shrink-0 border-t border-border/70 pt-4">
-                <MappingGuideDialog />
-              </div>
-            </>
-          </ResizableSidebar>
-        ) : (
-          // 좁은 화면에서는 사이드바 박스 대신, 목록 위에 "상세검색" 토글로 접힌 폼을 둔다.
-          <div className="space-y-3 pt-6 pl-5 pr-3 sm:pt-5">
-            <div className="panel-title">매핑 검색</div>
-
-            <button
-              type="button"
-              aria-expanded={advancedSearchOpen}
-              onClick={() => setAdvancedSearchOpen((prev) => !prev)}
-              className="flex items-center gap-1 text-sm font-medium text-muted-foreground"
-            >
-              상세검색
-              {advancedSearchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-
+    <StaffShell menu="admin" current="nfc-mapping" sidebar={sidebar} sidebarLabel="NFC 매핑 검색 패널">
+      <div className="staff-work staff-work__content">
+        {!isDesktop ? (
+          <section className="staff-panel staff-work__filters">
+            <div className="staff-panel__head">
+              <h2 className="staff-panel__title">매핑 검색</h2>
+              <button
+                type="button"
+                aria-expanded={advancedSearchOpen}
+                onClick={() => setAdvancedSearchOpen((prev) => !prev)}
+                className="staff-link-btn"
+              >
+                상세검색
+                {advancedSearchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            </div>
             {advancedSearchOpen ? (
-              <form onSubmit={onSearch} className="space-y-3">
+              <form onSubmit={onSearch} className="staff-work__fields">
                 {renderSearchFields()}
-                <div className="flex gap-2">
-                  <Button type="submit" className="flex-1">
+                <div className="staff-actions">
+                  <Button type="submit">
                     <Search className="h-4 w-4" />
                     검색
                   </Button>
@@ -704,146 +688,133 @@ export default function NfcMapping() {
                 </div>
               </form>
             ) : null}
-
             <MappingGuideDialog />
+          </section>
+        ) : null}
+
+        <section className="staff-panel staff-work__panel">
+          <div className="staff-work__heading">
+            <h1 className="staff-title">장비별 NFC 토큰</h1>
+            <div className="staff-work__tools">
+              <ToggleSwitch
+                checked={hideSimulated}
+                onChange={(checked) => {
+                  setHideSimulated(checked);
+                  setPage(1);
+                }}
+              >
+                시뮬레이션 데이터 숨기기
+              </ToggleSwitch>
+              <span className="staff-note">
+                활성 장비 <strong className="staff-num">{items.length}</strong>개
+              </span>
+              <span className="staff-note">
+                매핑 완료 <strong className="staff-num">{mappedCount}</strong>개
+              </span>
+              <Button variant="outline" onClick={fetchMappings} disabled={isRefreshing}>
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                새로고침
+              </Button>
+            </div>
           </div>
-        )}
 
-        {/* 모바일에서는 이 섹션이 사이드바 없이 단독으로 좌측 벽에 붙어 있었다 — xl 미만에서만
-            좌우 여백을 직접 주고, xl 이상(사이드바와 나란히 배치)에서는 기존 그대로 되돌린다. */}
-        <div className="flex w-full min-w-0 flex-1 justify-center pt-4 pb-14 pl-5 pr-3 sm:pt-5 xl:pl-0 xl:pr-[clamp(1rem,2.5vw,2rem)]">
-          <div className="w-full max-w-[1360px]">
-            <section className="surface-panel p-5 fade-rise-delay">
-              <div className="panel-header">
-                <div>
-                  <div className="panel-title">장비별 NFC 토큰</div>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={hideSimulated}
-                      onChange={(event) => {
-                        setHideSimulated(event.target.checked);
-                        setPage(1);
-                      }}
-                    />
-                    시뮬레이션 데이터 숨기기
-                  </label>
-                  <Badge variant="outline">활성 장비 {items.length}개</Badge>
-                  <Badge variant="outline">매핑 완료 {mappedCount}개</Badge>
-                  <Button variant="outline" onClick={fetchMappings} disabled={isRefreshing}>
-                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    새로고침
-                  </Button>
-                </div>
-              </div>
+          {error ? <div className="staff-alert">{error}</div> : null}
+          {notice ? <div className="staff-alert staff-alert--ok">{notice}</div> : null}
 
-              {error ? <div className="alert alert-error">{error}</div> : null}
-              {notice ? <div className="alert alert-success">{notice}</div> : null}
-
-              {isLoading ? (
-                <div className="rounded-lg border border-dashed border-border/70 px-6 py-12 text-center text-muted-foreground">
-                  매핑 목록을 불러오는 중입니다.
-                </div>
-              ) : visibleItems.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/70 px-6 py-12 text-center text-muted-foreground">
-                  표시할 장비가 없습니다.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {pagedItems.map((item) => {
-                    const tokenDraft = draftTokens[item.tag_id] ?? item.nfc_token ?? '';
-                    const trimmedToken = tokenDraft.trim();
-                    const nfcUrl = trimmedToken ? `${PUBLIC_APP_URL}/nfc/${encodeURIComponent(trimmedToken)}` : null;
-                    return (
-                      <section key={item.tag_id} className="border border-border/70 bg-background/80 p-4">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-[1.1rem] font-semibold tracking-[-0.03em] text-foreground">
-                                {item.equipment_name}
-                              </h3>
-                              <Badge variant="outline">{getAssetStatusLabel(item.asset_status)}</Badge>
-                              <Badge variant="outline">{item.equipment_type?.trim() || '미분류'}</Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground">{formatTagIdentity(item.tag_id)}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.ntag_bound && item.ntag_uid ? (
-                                <>
-                                  칩 {item.ntag_uid} · 탭 {item.ntag_last_ctr ?? 0}회 · 등록:{' '}
-                                  {formatRegisteredAt(item.created_at)}
-                                </>
-                              ) : (
-                                <>
-                                  <Badge variant="outline">미바인딩</Badge> · 등록:{' '}
-                                  {formatRegisteredAt(item.created_at)}
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="grid w-full gap-3 lg:max-w-[440px]">
-                            <Input
-                              value={tokenDraft}
-                              onChange={(e) =>
-                                setDraftTokens((current) => ({
-                                  ...current,
-                                  [item.tag_id]: e.target.value,
-                                }))
-                              }
-                              placeholder="예: defib-001"
-                            />
-                            <div className="rounded-lg border border-border/70 bg-secondary/35 px-4 py-3 text-xs text-muted-foreground break-all">
-                              {nfcUrl ?? '토큰을 입력하면 여기에 태그에 기록할 URL이 표시됩니다.'}
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                onClick={() => saveMapping(item.tag_id)}
-                                aria-disabled={!canManageNfc}
-                                className={!canManageNfc ? 'cursor-not-allowed opacity-50' : undefined}
-                                disabled={savingTagId === item.tag_id || removingTagId === item.tag_id}
-                              >
-                                <Save className="h-4 w-4" />
-                                {savingTagId === item.tag_id ? '저장 중...' : '저장'}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => removeMapping(item.tag_id)}
-                                aria-disabled={!canManageNfc}
-                                className={!canManageNfc ? 'cursor-not-allowed opacity-50' : undefined}
-                                disabled={
-                                  !item.nfc_token || savingTagId === item.tag_id || removingTagId === item.tag_id
-                                }
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                {removingTagId === item.tag_id ? '해제 중...' : '매핑 해제'}
-                              </Button>
-                            </div>
-                          </div>
+          {isLoading ? (
+            <div className="staff-empty-block">매핑 목록을 불러오는 중입니다.</div>
+          ) : visibleItems.length === 0 ? (
+            <div className="staff-empty-block">표시할 장비가 없습니다.</div>
+          ) : (
+            <div>
+              {pagedItems.map((item) => {
+                const tokenDraft = draftTokens[item.tag_id] ?? item.nfc_token ?? '';
+                const trimmedToken = tokenDraft.trim();
+                const nfcUrl = trimmedToken ? `${PUBLIC_APP_URL}/nfc/${encodeURIComponent(trimmedToken)}` : null;
+                return (
+                  <section key={item.tag_id} className="staff-mapping-row">
+                    <div className="staff-mapping-row__grid">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-[1.1rem] font-semibold tracking-[-0.03em] text-foreground">
+                            {item.equipment_name}
+                          </h3>
+                          <Badge variant="outline">{getAssetStatusLabel(item.asset_status)}</Badge>
+                          <Badge variant="outline">{item.equipment_type?.trim() || '미분류'}</Badge>
                         </div>
-                      </section>
-                    );
-                  })}
-                </div>
-              )}
+                        <div className="text-sm text-muted-foreground">{formatTagIdentity(item.tag_id)}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {item.ntag_bound && item.ntag_uid ? (
+                            <>
+                              칩 {item.ntag_uid} · 탭 {item.ntag_last_ctr ?? 0}회 · 등록:{' '}
+                              {formatRegisteredAt(item.created_at)}
+                            </>
+                          ) : (
+                            <>
+                              <Badge variant="outline">미바인딩</Badge> · 등록: {formatRegisteredAt(item.created_at)}
+                            </>
+                          )}
+                        </div>
+                      </div>
 
-              {visibleItems.length > 0 ? (
-                <Pagination
-                  page={safePage}
-                  pageSize={pageSize}
-                  totalItems={visibleItems.length}
-                  onPageChange={setPage}
-                  onPageSizeChange={(nextSize) => {
-                    setPageSize(nextSize);
-                    setPage(1);
-                  }}
-                />
-              ) : null}
-            </section>
-          </div>
-        </div>
+                      <div className="grid min-w-0 gap-3">
+                        <Input
+                          aria-label={`${item.equipment_name} NFC 토큰`}
+                          value={tokenDraft}
+                          onChange={(e) =>
+                            setDraftTokens((current) => ({
+                              ...current,
+                              [item.tag_id]: e.target.value,
+                            }))
+                          }
+                          placeholder="예: defib-001"
+                        />
+                        <div className="staff-mapping-row__url">
+                          {nfcUrl ?? '토큰을 입력하면 여기에 태그에 기록할 URL이 표시됩니다.'}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            onClick={() => saveMapping(item.tag_id)}
+                            aria-disabled={!canManageNfc}
+                            className={!canManageNfc ? 'cursor-not-allowed opacity-50' : undefined}
+                            disabled={savingTagId === item.tag_id || removingTagId === item.tag_id}
+                          >
+                            <Save className="h-4 w-4" />
+                            {savingTagId === item.tag_id ? '저장 중...' : '저장'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => removeMapping(item.tag_id)}
+                            aria-disabled={!canManageNfc}
+                            className={!canManageNfc ? 'cursor-not-allowed opacity-50' : undefined}
+                            disabled={!item.nfc_token || savingTagId === item.tag_id || removingTagId === item.tag_id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {removingTagId === item.tag_id ? '해제 중...' : '매핑 해제'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+
+          {visibleItems.length > 0 ? (
+            <Pagination
+              page={safePage}
+              pageSize={pageSize}
+              totalItems={visibleItems.length}
+              onPageChange={setPage}
+              onPageSizeChange={(nextSize) => {
+                setPageSize(nextSize);
+                setPage(1);
+              }}
+            />
+          ) : null}
+        </section>
       </div>
-    </AppShell>
+    </StaffShell>
   );
 }

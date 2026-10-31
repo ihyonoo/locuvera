@@ -10,7 +10,7 @@ type AdminNavProps = {
 };
 
 const TABS: { key: AdminNavProps['active']; label: string; path: string }[] = [
-  { key: 'verification', label: '장비 사용 이력 조회', path: '/verification' },
+  { key: 'verification', label: '이력 조회', path: '/verification' },
   { key: 'nfc-mapping', label: 'NFC 매핑', path: '/admin/nfc-mapping' },
   { key: 'devices', label: '기기 상태', path: '/admin/devices' },
   { key: 'signup-requests', label: '가입 승인', path: '/admin/signup-requests' },

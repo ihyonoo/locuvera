@@ -108,12 +108,12 @@ describe('IntegrityVerification usage detail popup', () => {
     expect(screen.queryByText('머클 검증 결과')).not.toBeInTheDocument();
   });
 
-  it('summarises who, where and when on the row itself', async () => {
+  it('shows only the borrower with the location summary on the row', async () => {
     renderPage();
 
     const row = await screen.findByRole('button', { name: /검체이송 카트 7호/ });
     expect(within(row).getByText(/박수현/)).toBeInTheDocument();
-    expect(within(row).getByText(/김도윤/)).toBeInTheDocument();
+    expect(within(row).queryByText(/김도윤/)).not.toBeInTheDocument();
     expect(within(row).getByText(/1층 병동 A/)).toBeInTheDocument();
     expect(within(row).getByText(/수술실/)).toBeInTheDocument();
   });
