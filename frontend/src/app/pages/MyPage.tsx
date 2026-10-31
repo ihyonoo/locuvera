@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -19,6 +19,7 @@ import {
   type AuthUser,
 } from '../lib/auth';
 import { API_BASE_URL } from '../lib/runtime';
+import { getStoredTheme, storeTheme, syncThemeForPath, type Theme } from '../lib/theme';
 
 type MeUser = AuthUser & { created_at?: string | null; google_linked?: boolean };
 
@@ -51,6 +52,8 @@ function formatDate(iso: string | null | undefined) {
 
 export default function MyPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [user, setUser] = useState<MeUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -340,6 +343,35 @@ export default function MyPage() {
                 <InfoField label="가입일" value={formatDate(user.created_at)} />
                 <InfoField label="Google 연동" value={user.google_linked ? '연동됨' : '미연동'} />
               </dl>
+            </section>
+
+            {/* 화면 테마 — 기기(브라우저)별로 저장한다 */}
+            <section className="surface-panel p-6 fade-rise">
+              <div className="panel-title mb-1">화면 테마</div>
+              <p className="panel-copy mb-4">이 기기에서만 적용됩니다.</p>
+              <div role="radiogroup" aria-label="화면 테마" className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                {(
+                  [
+                    ['light', '라이트'],
+                    ['dark', '다크'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="screen-theme"
+                      value={value}
+                      checked={theme === value}
+                      onChange={() => {
+                        setTheme(value);
+                        storeTheme(value);
+                        syncThemeForPath(location.pathname);
+                      }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </section>
 
             {/* 비밀번호 변경 (토글) */}

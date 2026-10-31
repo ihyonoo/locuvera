@@ -72,6 +72,79 @@
   --status-live: var(--ok-solid);
   --status-warn: var(--warn-solid);
   --status-fail: var(--err-solid);
+  /* 흰 글자를 얹는 채운 청록(기본 버튼·활성 페이지 번호) — 라이트는 --primary와 같고 다크에서만 진해진다 */
+  --primary-solid: #0d9488;
+  --map3d-stage: #eef1f3;
+  --selection-background: rgba(17, 17, 17, 0.12);
+  --skeleton-shimmer: rgb(15 46 79 / 0.07);
+}
+
+/* 다크 모드 — 마이페이지에서 고르면 html.dark가 붙는다(lib/theme.ts). 회색·검정 계열.
+   화면(screen)에서만 적용해 증명서 인쇄는 늘 라이트다. --primary(청록 글자·선)는 다크에서도 4.5:1을 넘어 그대로 둔다 */
+@media screen {
+  html.dark {
+    color-scheme: dark;
+    --background: #111214;
+    --foreground: #e7e8ea;
+    --card: #1a1b1e;
+    --card-foreground: #e7e8ea;
+    --popover: #1a1b1e;
+    --popover-foreground: #e7e8ea;
+    --primary-solid: #0f766e;
+    --secondary: #232428;
+    --secondary-foreground: #e7e8ea;
+    --muted: #232428;
+    --muted-foreground: #a1a3a8;
+    --accent: #0f2b29;
+    --accent-foreground: #e7e8ea;
+    --border: #33353a;
+    /* 입력칸·버튼 테두리는 UI 요소라 3:1을 지킨다 — 장식용 구분선(--border)보다 밝다 */
+    --input: #6b6e75;
+    --input-background: #16171a;
+    --switch-background: #33353a;
+    --ring: rgba(45, 212, 191, 0.6);
+    --sidebar: #1a1b1e;
+    --sidebar-foreground: #e7e8ea;
+    --sidebar-accent: #232428;
+    --sidebar-accent-foreground: #e7e8ea;
+    --sidebar-border: #33353a;
+    --sidebar-ring: rgba(45, 212, 191, 0.6);
+    --app-body-background: #111214;
+    --app-nav-background: #1a1b1e;
+    --app-nav-border: #33353a;
+    --app-panel-background: #1a1b1e;
+    --app-panel-border: #33353a;
+    --app-panel-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.3),
+      0 14px 32px -12px rgba(0, 0, 0, 0.55);
+    --app-soft-panel-background: #232428;
+    --app-soft-panel-border: #33353a;
+    --app-muted-panel-background: #16171a;
+    --ok-fg: #5eead4;
+    --ok-bg: #0d2624;
+    --ok-border: #1d4f4a;
+    --ok-solid: #14b8a6;
+    --warn-fg: #fcd34d;
+    --warn-bg: #2a2213;
+    --warn-border: #5e4a22;
+    --warn-solid: #d4a017;
+    --err-fg: #fca5a5;
+    --err-bg: #2f1a18;
+    --err-border: #6e352b;
+    --err-solid: #e0704f;
+    --map3d-stage: #16171a;
+    --selection-background: rgba(255, 255, 255, 0.18);
+    --skeleton-shimmer: rgb(255 255 255 / 0.06);
+  }
+}
+
+/* 다크 모드의 2D 평면도(흰 바탕 병원 안내도) — 파일은 그대로 두고 화면에서만 반전한다.
+   반전으로 생긴 검은 바탕은 screen 혼합으로 지도 상자 배경(--card)과 같은 색이 된다 */
+@media screen {
+  html.dark .floor-map__plan {
+    filter: invert(1) hue-rotate(180deg);
+    mix-blend-mode: screen;
+  }
 }
 
 @theme inline {
@@ -83,6 +156,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-solid: var(--primary-solid);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -238,7 +312,7 @@
   }
 
   ::selection {
-    background: rgba(17, 17, 17, 0.12);
+    background: var(--selection-background);
     color: var(--foreground);
   }
 }
@@ -573,7 +647,7 @@
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgb(15 46 79 / 0.07), transparent);
+    background: linear-gradient(90deg, transparent, var(--skeleton-shimmer), transparent);
     animation: skeleton-shimmer 1.4s ease-in-out infinite;
   }
 
@@ -725,13 +799,13 @@
 .pager-cell--active {
   position: relative;
   z-index: 1;
-  border-color: var(--primary);
-  background: var(--primary);
+  border-color: var(--primary-solid);
+  background: var(--primary-solid);
   color: var(--primary-foreground);
 }
 
 .pager-cell--active:hover {
-  background: var(--primary);
+  background: var(--primary-solid);
   color: var(--primary-foreground);
 }
 
