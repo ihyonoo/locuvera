@@ -51,11 +51,14 @@ function luminance([r, g, b]: Rgba): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
-function contrast(fg: string, bg: string): number {
-  const below = parseColor(dark[bg] ?? bg);
-  const above = over(parseColor(dark[fg] ?? fg), below);
+function ratio(top: Rgba, below: Rgba): number {
+  const above = over(top, below);
   const [hi, lo] = [luminance(above), luminance(below)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
+}
+
+function contrast(fg: string, bg: string): number {
+  return ratio(parseColor(dark[fg] ?? fg), parseColor(dark[bg] ?? bg));
 }
 
 describe('dark theme tokens', () => {
@@ -120,5 +123,55 @@ describe('dark theme tokens', () => {
     ['--ring', '--input-background', 3],
   ])('%s on %s reaches %s:1', (fg, bg, minimum) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(minimum);
+  });
+});
+
+// 인증 화면: 배경과 같은 색(--auth-bg)의 출입증 카드가 그림자로만 떠 보인다(뉴모피즘)
+// 카드 안 글자는 라이트 토큰을 쓴다
+// 입력칸·버튼 경계는 원본처럼 그림자와 흰 윤곽으로만 그린다 — 경계 3:1은 적용하지 않기로 했다(2026-10-31)
+describe('auth card', () => {
+  const surface = parseColor(tokens(block(/\n\s*\.auth-split\s*\{/))['--auth-bg']);
+  const card = { ...light, ...tokens(block(/\n\s*\.auth-split__card\s*\{/)) };
+
+  it.each([
+    ['--foreground', 4.5],
+    ['--muted-foreground', 4.5],
+  ])('%s reaches %s:1 on the card', (fg, minimum) => {
+    expect(ratio(parseColor(card[fg]), surface)).toBeGreaterThanOrEqual(minimum);
+  });
+
+  it('keeps short cards (find ID, forgot password …) at the login card size with the form centered', () => {
+    const card = block(/\n\s*\.auth-split__card\s*\{/);
+    expect(card).toMatch(/min-height:\s*37rem/);
+    expect(card).toMatch(/flex-direction:\s*column/);
+    const body = block(/\n\s*\.auth-split__body\s*\{/);
+    expect(body).toMatch(/flex:\s*1/);
+    expect(body).toMatch(/justify-content:\s*center/);
+  });
+
+  it('sweeps a light streak across the submit button on hover, but not when reduced motion is preferred', () => {
+    const submit = "\n.auth-split button[type='submit'][data-slot='button']";
+    const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const streak = block(new RegExp(`${escape(submit)}::after\\s*\\{`));
+    expect(streak).toMatch(/transition:\s*left/);
+    expect(css).toMatch(new RegExp(`${escape(submit)}:hover::after`));
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*::after\s*\{\s*transition:\s*none;/);
+  });
+
+  it('flips the card in, but not when reduced motion is preferred', () => {
+    expect(block(/\n\s*\.auth-split__card\s*\{/)).toMatch(/animation:\s*auth-card-flip-in/);
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.auth-split__card\s*\{\s*animation:\s*none;/,
+    );
+  });
+});
+
+// 인증 화면 배경색이 html 바탕과 달라 스크롤바 자리가 흰 띠로 남지 않게 한다
+describe('auth pages scrollbar', () => {
+  it('hides the page scrollbar and its reserved gutter while an auth page is shown', () => {
+    const rule = block(/\nhtml:has\(\.auth-split\)\s*\{/);
+    expect(rule).toMatch(/scrollbar-gutter:\s*auto/);
+    expect(rule).toMatch(/scrollbar-width:\s*none/);
+    expect(block(/\nhtml:has\(\.auth-split\)::-webkit-scrollbar\s*\{/)).toMatch(/display:\s*none/);
   });
 });

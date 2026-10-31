@@ -819,35 +819,294 @@
   user-select: none;
 }
 
-/* ── 인증 화면 split 레이아웃 ─────────────────────────────── */
-/* 상단바 없이 화면 전체를 쓴다. 랜딩으로 가는 로고는 폼 칸 왼쪽 위(.auth-brand)에 있다 */
+/* ── 인증 화면: 직원 출입증 카드 ─────────────────────────────── */
+/* 상단바 없이 배경과 같은 색의 출입증 카드가 그림자로만 떠 보인다(뉴모피즘) */
+/* 왼쪽 위는 밝은 그림자, 오른쪽 아래는 어두운 그림자 — 빛이 왼쪽 위에서 온다 */
+/* 색감은 참고 영상처럼 무채색 회색, 강조만 청록(아이덴티티)이다 */
+/* 대비는 theme.contrast.test.ts가 계산한다 */
 .auth-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  height: 100vh;
-  padding: 0;
-  background: var(--app-panel-background);
+  --auth-bg: #e3e3e3;
+  --auth-shadow-light: rgba(255, 255, 255, 0.85);
+  --auth-shadow-dark: rgba(163, 163, 163, 0.6);
+  display: flex;
+  min-height: 100vh;
+  padding: clamp(1.5rem, 5vh, 3rem) 1rem;
+  /* 카드 왼쪽 위에 빛이 번진 듯한 옅은 광채 */
+  background: radial-gradient(circle at 42% 28%, #efefef 0, var(--auth-bg) 40%);
+  perspective: 1600px;
 }
 
-.auth-split__media {
+/* 배경색이 html 바탕(흰색)과 달라 스크롤바 자리(html의 scrollbar-gutter: stable)가 흰 띠로 남지 않게 숨긴다 */
+/* 회원가입처럼 긴 폼은 스크롤바 없이 휠·터치로 스크롤된다 */
+html:has(.auth-split) {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+html:has(.auth-split)::-webkit-scrollbar {
+  display: none;
+}
+
+/* 출입증 카드 — 카드 안의 입력칸·버튼은 카드 색을 바탕으로 쓰고, 경계는 원본처럼 그림자와 흰 윤곽(--input)으로만 그린다 */
+/* 화면에 들어올 때 세로축으로 돌아 정면을 향한다(영상의 뒤집힘 후반) */
+/* margin:auto — 내용이 화면보다 길어도 위쪽이 잘리지 않는다 */
+/* 최소 높이는 로그인 카드가 내용만으로 갖는 높이(1440px 화면 실측 37rem) — 아이디 찾기처럼 짧은 화면도 같은 크기의 출입증이 되고, 남는 자리에는 폼을 가운데 둔다 */
+.auth-split__card {
+  --foreground: #414141;
+  --muted-foreground: #5e5e5e;
+  --background: #e3e3e3;
+  --input-background: #e3e3e3;
+  --secondary: #d6d6d6;
+  --input: rgba(255, 255, 255, 0.7);
+  /* 목줄 구멍 자리 — 양 옆에서 안쪽, 위에서 아래로, 구멍 높이 */
+  --auth-hole-inset: 2.25rem;
+  --auth-hole-top: 1.1rem;
+  --auth-hole-height: 0.5rem;
   position: relative;
-  overflow: hidden;
-  background: var(--muted);
-}
-
-.auth-split__form {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  border-left: 1px solid var(--border);
-  padding: clamp(2rem, 4vw, 3.5rem) clamp(1.5rem, 4vw, 3.5rem);
+  width: 100%;
+  max-width: 30rem;
+  min-height: 37rem;
+  margin: auto;
+  padding: 2.75rem clamp(1.5rem, 5vw, 2.75rem) 2.5rem;
+  border-radius: 1.75rem;
+  background: var(--auth-bg);
+  box-shadow:
+    -14px -14px 30px var(--auth-shadow-light),
+    16px 16px 34px var(--auth-shadow-dark);
+  color: var(--foreground);
+  animation: auth-card-flip-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-/* 폼 칸 왼쪽 위 로고 — 문서 흐름 안에 있어 긴 폼과 겹치지 않는다. 인증 화면은 늘 라이트라 컬러 로고다 */
-.auth-brand {
-  align-self: flex-start;
-  margin-bottom: 1.5rem;
+@keyframes auth-card-flip-in {
+  from {
+    opacity: 0.3;
+    transform: rotateY(-90deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-split__card {
+    animation: none;
+  }
+}
+
+/* 목줄 — 카드 위쪽 양 모서리의 구멍에서 한 가닥씩 곧게 위로 올라간다 */
+/* 카드 기준 절대 위치라 카드와 함께 돈다. 줄은 화면 위 밖까지 길게 뻗는다 */
+/* 줄 아래 끝이 구멍 아래 끝에 닿고, 구멍이 그 끝을 덮어 구멍을 지나는 것처럼 보인다 */
+.auth-split__strap {
+  position: absolute;
+  bottom: calc(100% - var(--auth-hole-top) - var(--auth-hole-height));
+  width: 0.55rem;
+  height: 100vh;
+  /* 회색 천 — 왼쪽 가장자리만 살짝 밝게 */
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px),
+    #6b6b6b;
+  box-shadow: 3px 0 8px var(--auth-shadow-dark);
+  pointer-events: none;
+}
+
+/* 줄 가운데가 구멍 가운데에 오도록 놓는다(구멍 폭 1rem, 줄 폭 0.55rem) */
+.auth-split__strap--left {
+  left: calc(var(--auth-hole-inset) + 0.5rem - 0.275rem);
+}
+
+.auth-split__strap--right {
+  right: calc(var(--auth-hole-inset) + 0.5rem - 0.275rem);
+}
+
+/* 구멍 — 카드에 뚫린 홈. 줄 끝을 덮도록 줄보다 위에 그린다 */
+.auth-split__hole {
+  position: absolute;
+  z-index: 1;
+  top: var(--auth-hole-top);
+  width: 1rem;
+  height: var(--auth-hole-height);
+  border-radius: 999px;
+  background: #d4d4d4;
+  box-shadow:
+    inset 2px 2px 4px var(--auth-shadow-dark),
+    inset -2px -2px 4px var(--auth-shadow-light);
+}
+
+.auth-split__hole--left {
+  left: var(--auth-hole-inset);
+}
+
+.auth-split__hole--right {
+  right: var(--auth-hole-inset);
+}
+
+/* 머리줄: 로고(왼쪽) + NFC 칩(오른쪽) */
+.auth-split__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+/* 출입증 종류 탭(로그인) — 파인 홈 안에서 고른 쪽이 솟는다 */
+/* 고른 쪽 앞의 청록 점이 종류를 표시한다 — 청록 글자는 회색 위에서 4.5:1이 안 돼 글자는 진한 회색으로 둔다 */
+.auth-split__badge-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  margin-bottom: 1.75rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  box-shadow:
+    inset 3px 3px 6px var(--auth-shadow-dark),
+    inset -3px -3px 6px var(--auth-shadow-light);
+}
+
+.auth-split__badge-tabs label {
+  cursor: pointer;
+}
+
+.auth-split__badge-tabs span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition:
+    box-shadow 0.2s ease,
+    color 0.2s ease;
+}
+
+.auth-split__badge-tabs input:checked + span {
   color: var(--foreground);
+  box-shadow:
+    4px 4px 8px var(--auth-shadow-dark),
+    -4px -4px 8px var(--auth-shadow-light);
+}
+
+.auth-split__badge-tabs input:checked + span::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--primary-solid);
+}
+
+.auth-split__badge-tabs input:focus-visible + span {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* NFC 칩 — 은빛 판에 접점 홈을 선으로 그린다 */
+.auth-split__chip {
+  width: 2.6rem;
+  height: 2rem;
+  border-radius: 0.4rem;
+  background:
+    linear-gradient(90deg, transparent 32%, rgba(95, 95, 95, 0.35) 32% 35%, transparent 35% 65%, rgba(95, 95, 95, 0.35) 65% 68%, transparent 68%),
+    linear-gradient(180deg, transparent 47%, rgba(95, 95, 95, 0.35) 47% 53%, transparent 53%),
+    linear-gradient(135deg, #ededed, #bdbdbd);
+  box-shadow:
+    2px 2px 4px var(--auth-shadow-dark),
+    -2px -2px 4px var(--auth-shadow-light);
+}
+
+/* 입력칸·셀렉트 — 카드에 눌려 들어간 모양. 테두리 없이 그림자로 경계가 드러나도록 조금 깊게 판다 */
+.auth-split [data-slot='input'],
+.auth-split [data-slot='select-trigger'] {
+  border-radius: 0.75rem;
+  box-shadow:
+    inset 4px 4px 8px var(--auth-shadow-dark),
+    inset -4px -4px 8px var(--auth-shadow-light);
+}
+
+/* 포커스는 진한 청록 테두리(2px처럼 보이게 안쪽 선을 더한다)와 안팎의 청록 빛 — 영상의 빨간 윤곽 빛을 청록으로 */
+.auth-split [data-slot='input']:focus-visible,
+.auth-split [data-slot='select-trigger']:focus-visible {
+  border-color: var(--primary-solid);
+  box-shadow:
+    inset 4px 4px 8px var(--auth-shadow-dark),
+    inset -4px -4px 8px var(--auth-shadow-light),
+    inset 0 0 0 1px var(--primary-solid),
+    inset 0 0 10px rgba(13, 148, 136, 0.35),
+    0 0 0 4px rgba(13, 148, 136, 0.3);
+}
+
+/* 버튼·권한 선택 — 카드에서 솟은 모양, 누르면(선택되면) 들어간다 */
+.auth-split [data-slot='button'],
+.auth-split [role='radiogroup']:not(.auth-split__badge-tabs) input + span {
+  border-radius: 0.75rem;
+  box-shadow:
+    5px 5px 10px var(--auth-shadow-dark),
+    -5px -5px 10px var(--auth-shadow-light);
+}
+
+.auth-split [data-slot='button']:active,
+.auth-split [role='radiogroup']:not(.auth-split__badge-tabs) input:checked + span {
+  box-shadow:
+    inset 3px 3px 6px var(--auth-shadow-dark),
+    inset -3px -3px 6px var(--auth-shadow-light);
+}
+
+/* 제출 버튼 — 평소엔 카드 색에 진한 회색 글자, 올리거나 키보드로 고르면 청록이 번지듯 채워진다 */
+.auth-split button[type='submit'][data-slot='button'] {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--input);
+  background: var(--auth-bg);
+  color: var(--foreground);
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    box-shadow 0.2s ease;
+}
+
+.auth-split button[type='submit'][data-slot='button']:hover,
+.auth-split button[type='submit'][data-slot='button']:focus-visible {
+  border-color: transparent;
+  background: var(--primary-solid);
+  color: var(--primary-foreground);
+}
+
+/* 빛줄기 — 비스듬한 흰 띠가 버튼을 가로지른다(영상처럼). 올리면 왼쪽→오른쪽, 떼면 거꾸로 지나간다 */
+.auth-split button[type='submit'][data-slot='button']::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -35%;
+  width: 18%;
+  height: 200%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+  transform: rotate(25deg);
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+
+.auth-split button[type='submit'][data-slot='button']:hover::after,
+.auth-split button[type='submit'][data-slot='button']:focus-visible::after {
+  left: 120%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-split button[type='submit'][data-slot='button']::after {
+    transition: none;
+  }
+}
+
+/* 카드 머리줄 왼쪽 로고 — 랜딩으로 간다 */
+/* 카드에 눌러 찍은(음각) 모양: 방패 왼쪽·"Locu"(currentColor)는 카드보다 조금 어두운 회색, 청록 부분은 그대로 */
+/* 오른쪽 아래 흰 선 + 왼쪽 위 어두운 선으로 파인 홈처럼 보이게 한다 */
+.auth-brand {
+  display: block;
+  color: #c4c4c4;
   text-decoration: none;
 }
 
@@ -855,6 +1114,7 @@
   display: block;
   height: 1.65rem;
   width: auto;
+  filter: drop-shadow(1px 1px 0 rgba(255, 255, 255, 0.95)) drop-shadow(-1px -1px 0 rgba(0, 0, 0, 0.22));
   transition: opacity 0.15s ease;
 }
 
@@ -862,29 +1122,28 @@
   opacity: 0.8;
 }
 
-/* align-items:center 대신 margin:auto — 내용이 넘칠 때 위쪽이 잘리지 않는다 */
-.auth-split__form-inner {
-  width: 100%;
-  max-width: 28rem;
-  margin: auto;
-}
-
 .auth-split__title {
-  font-size: clamp(2rem, 3.2vw, 2.6rem);
+  font-size: clamp(1.75rem, 2.6vw, 2.1rem);
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.15;
+  line-height: 1.2;
+  text-align: center;
   color: var(--foreground);
 }
 
 .auth-split__subtitle {
-  margin-top: 0.7rem;
+  margin-top: 0.6rem;
+  text-align: center;
   color: var(--muted-foreground);
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1.6;
 }
 
 .auth-split__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
   margin-top: 2rem;
 }
 
@@ -904,141 +1163,21 @@
   color: var(--primary);
 }
 
-/* 폼 안의 좌우 구분선 + '또는' */
+/* 폼 안의 좌우 구분선 + '또는' — 뒤에 사진이 비칠 수 있어 글자 뒤를 칠해 선을 가리지 않고 선을 양쪽에 따로 그린다 */
 .auth-split__divider {
-  position: relative;
-  text-align: center;
-}
-
-.auth-split__divider::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--border);
-}
-
-.auth-split__divider span {
-  position: relative;
-  padding-inline: 0.75rem;
-  background: var(--app-panel-background);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   color: var(--muted-foreground);
   font-size: 0.8rem;
 }
 
-/* ── 인증 화면 이미지 캐러셀 ──────────────────────────────── */
-
-.auth-carousel {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.auth-carousel__image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 0.7s ease;
-}
-
-.auth-carousel__image--active {
-  opacity: 1;
-}
-
-.auth-carousel__arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.6rem;
-  height: 2.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: rgba(10, 26, 41, 0.3);
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.auth-carousel__arrow:hover {
-  background: rgba(10, 26, 41, 0.55);
-  border-color: rgba(255, 255, 255, 0.85);
-}
-
-.auth-carousel__arrow--prev {
-  left: 1.25rem;
-}
-
-.auth-carousel__arrow--next {
-  right: 1.25rem;
-}
-
-/* 아이콘 라이브러리 대신 보더로 그린 꺾쇠 */
-.auth-carousel__chevron {
-  width: 0.6rem;
-  height: 0.6rem;
-  border-top: 2px solid #ffffff;
-  border-right: 2px solid #ffffff;
-}
-
-.auth-carousel__chevron--right {
-  transform: translateX(-2px) rotate(45deg);
-}
-
-.auth-carousel__chevron--left {
-  transform: translateX(2px) rotate(-135deg);
-}
-
-.auth-carousel__dots {
-  position: absolute;
-  left: 50%;
-  bottom: 1.6rem;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 0.5rem;
-}
-
-.auth-carousel__dot {
-  width: 2.25rem;
-  height: 3px;
-  border: none;
-  padding: 0;
-  background: rgba(255, 255, 255, 0.45);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.auth-carousel__dot:hover {
-  background: rgba(255, 255, 255, 0.75);
-}
-
-.auth-carousel__dot--active {
-  background: #ffffff;
-}
-
-@media (max-width: 900px) {
-  .auth-split {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-
-  /* 좁은 화면에서는 이미지 패널을 숨기고 폼만 세로로 흐르게 둔다 */
-  .auth-split__media {
-    display: none;
-  }
-
-  .auth-split__form {
-    border-left: none;
-    overflow: visible;
-  }
+.auth-split__divider::before,
+.auth-split__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 /* ── 사용 이력 검증 증명서 (IntegrityVerification 상세 팝업) ───────────────

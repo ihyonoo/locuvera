@@ -106,7 +106,7 @@ export default function SignUpComplete() {
 
   return (
     <AuthSplitLayout
-      title="추가 정보 입력"
+      title="Complete sign-up"
       subtitle="Google 계정 인증이 확인되었습니다. 가입을 완료하려면 아래 정보를 입력해 주세요."
     >
       {!pending ? (
@@ -224,7 +224,7 @@ export default function SignUpComplete() {
           {error ? <div className="alert alert-error">{error}</div> : null}
 
           <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-            {isLoading ? '가입 중...' : '가입 완료'}
+            {isLoading ? 'Creating account...' : 'Create account'}
           </Button>
         </form>
       )}

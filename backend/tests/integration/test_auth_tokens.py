@@ -27,7 +27,8 @@ def test_reset_failure_does_not_consume_one_time_token(client, seed_user, monkey
     assert retry.status_code == 200
 
 
-def test_google_complete_validation_failure_keeps_pending_token(client):
+def test_google_complete_validation_failure_keeps_pending_token(client, monkeypatch):
+    monkeypatch.setattr("backend.server.GOOGLE_LOGIN_ENABLED", True)
     pending = create_action_token(
         purpose="oauth_pending",
         ttl_sec=300,

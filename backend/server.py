@@ -78,6 +78,7 @@ try:
         DATABASE_URL,
         DEMO_LOGIN_ENABLED,
         EMAIL_VERIFY_TTL_SEC,
+        GOOGLE_LOGIN_ENABLED,
         OAUTH_HANDOFF_TTL_SEC,
         OAUTH_PENDING_TTL_SEC,
         PASSWORD_RESET_TTL_SEC,
@@ -161,6 +162,7 @@ except ModuleNotFoundError as exc:
         DATABASE_URL,
         DEMO_LOGIN_ENABLED,
         EMAIL_VERIFY_TTL_SEC,
+        GOOGLE_LOGIN_ENABLED,
         OAUTH_HANDOFF_TTL_SEC,
         OAUTH_PENDING_TTL_SEC,
         PASSWORD_RESET_TTL_SEC,
@@ -784,8 +786,15 @@ def _frontend_redirect(path: str, fragment_params: dict) -> RedirectResponse:
     return RedirectResponse(url=f"{APP_PUBLIC_URL}{path}#{fragment}", status_code=302)
 
 
+# 꺼져 있으면 키가 설정돼 있어도 Google 로그인·가입을 시작하거나 끝낼 수 없다(연동 해제는 그대로 둔다).
+def _require_google_login_enabled() -> None:
+    if not GOOGLE_LOGIN_ENABLED:
+        raise HTTPException(404, "Google 로그인이 비활성화되어 있습니다.")
+
+
 @app.get("/auth/google/start")
 def google_start(mode: str = Query(default="login"), redirect: str | None = Query(default=None)):
+    _require_google_login_enabled()
     if not google_oauth.is_google_configured():
         raise HTTPException(503, "Google 로그인이 설정되지 않았습니다.")
     mode = mode if mode in ("login", "signup") else "login"
@@ -801,6 +810,7 @@ def google_callback(
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ):
+    _require_google_login_enabled()
     if error or not code or not state:
         return _frontend_redirect("/", {"oauth_error": error or "google_login_failed"})
 
@@ -881,6 +891,7 @@ def session_exchange(body: SessionExchangeRequest):
 
 @app.post("/auth/google/complete")
 def google_complete(body: GoogleCompleteRequest):
+    _require_google_login_enabled()
     try:
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
             consumed = consume_action_token(body.pending_token.strip(), "oauth_pending", cursor=cur)

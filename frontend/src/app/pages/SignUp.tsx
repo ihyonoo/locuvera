@@ -11,7 +11,7 @@ import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordMatchHint from '../components/PasswordMatchHint';
 import { getPasswordError } from '../lib/passwordPolicy';
 import { getRedirectTarget, withRedirectQuery, LOGIN_PATH } from '../lib/auth';
-import { API_BASE_URL } from '../lib/runtime';
+import { API_BASE_URL, isGoogleLoginEnabled } from '../lib/runtime';
 
 const POSITION_OPTIONS = ['간호사', '의사', '간호조무사', '방사선사', '임상병리사', '물리치료사', '기타'];
 const ROLE_OPTIONS = [
@@ -98,7 +98,7 @@ export default function SignUp() {
   };
 
   return (
-    <AuthSplitLayout title="회원가입" subtitle="병원 계정을 만들고 장비 이력 관리를 시작하세요.">
+    <AuthSplitLayout title="Sign up" subtitle="병원 계정을 만들고 장비 이력 관리를 시작하세요.">
       <form onSubmit={handleSignUp} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="username">아이디</Label>
@@ -223,7 +223,7 @@ export default function SignUp() {
         {success ? <div className="alert alert-success">{success}</div> : null}
 
         <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-          {isLoading ? '가입 중...' : '회원가입'}
+          {isLoading ? 'Creating account...' : 'Create account'}
         </Button>
 
         <div className="auth-split__links">
@@ -236,11 +236,15 @@ export default function SignUp() {
           </button>
         </div>
 
-        <div className="auth-split__divider">
-          <span>또는</span>
-        </div>
+        {isGoogleLoginEnabled() ? (
+          <>
+            <div className="auth-split__divider">
+              <span>또는</span>
+            </div>
 
-        <GoogleButton mode="signup" label="Google로 가입하기" />
+            <GoogleButton mode="signup" label="Google로 가입하기" />
+          </>
+        ) : null}
       </form>
     </AuthSplitLayout>
   );

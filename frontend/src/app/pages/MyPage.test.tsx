@@ -152,7 +152,16 @@ describe('MyPage account actions for demo accounts', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  it('hides Google linking while Google login is off (default)', async () => {
+    await renderDemoPage();
+
+    expect(screen.queryByText('Google 연동', { selector: '.panel-title' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Google 연동', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Google/ })).not.toBeInTheDocument();
   });
 
   it('warns instead of opening the password form', async () => {
@@ -174,6 +183,7 @@ describe('MyPage account actions for demo accounts', () => {
   });
 
   it('warns instead of calling the google unlink API', async () => {
+    vi.stubEnv('VITE_GOOGLE_LOGIN_ENABLED', 'true');
     await renderDemoPage();
     const callsBefore = vi.mocked(fetch).mock.calls.length;
 

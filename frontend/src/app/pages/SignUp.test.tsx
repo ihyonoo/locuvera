@@ -34,3 +34,27 @@ describe('SignUp role picker', () => {
     expect(roleOption('관리자').textContent).toBe('관리자');
   });
 });
+
+describe('SignUp Google switch', () => {
+  function renderSignUp() {
+    render(
+      <MemoryRouter initialEntries={['/signup']}>
+        <SignUp />
+      </MemoryRouter>,
+    );
+  }
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('hides Google sign-up while Google login is off (default)', () => {
+    renderSignUp();
+    expect(screen.queryByRole('button', { name: 'Google로 가입하기' })).not.toBeInTheDocument();
+    expect(screen.queryByText('또는')).not.toBeInTheDocument();
+  });
+
+  it('shows it when VITE_GOOGLE_LOGIN_ENABLED is true', () => {
+    vi.stubEnv('VITE_GOOGLE_LOGIN_ENABLED', 'true');
+    renderSignUp();
+    expect(screen.getByRole('button', { name: 'Google로 가입하기' })).toBeInTheDocument();
+  });
+});
