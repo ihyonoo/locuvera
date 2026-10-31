@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  acesFilmicInverse,
   createQualityGovernor,
   equipmentLayerKey,
+  pinScreenDiameter,
+  pinWorldDiameter,
   placeTagLabels,
   tagColors,
   worldPerPixel,
   type Rect,
   type TagSpot,
 } from './runtime';
+import { PIN_COLORS } from '../mapPins';
 
 describe('placeTagLabels', () => {
   const view: Rect = { left: 0, top: 0, right: 800, bottom: 600 };
-  // 점 중심(x, y)과 이름표 크기
-  const dot = (id: string, x: number, y: number, w = 80) => ({ id, x, y, w, h: 20 });
+  // 점 중심(x, y), 이름표 크기, 점의 화면 반지름(r)
+  const dot = (id: string, x: number, y: number, w = 80, r = 7) => ({ id, x, y, w, h: 20, r });
   const rectOf = (s: TagSpot, w = 80): Rect => ({
     left: s.x - w / 2,
     top: s.y - 10,
@@ -27,6 +31,12 @@ describe('placeTagLabels', () => {
     // 점 반지름 7 + 간격 4
     expect(rectOf(s).bottom).toBe(300 - 11);
     expect(s.moved).toBe(false);
+  });
+
+  it('keeps the label clear of a larger dot', () => {
+    const s = placeTagLabels([dot('a', 300, 300, 80, 20)], view).get('a')!;
+    // 점 반지름 20 + 간격 4
+    expect(rectOf(s).bottom).toBe(300 - 24);
   });
 
   it('moves a label that would cover another label', () => {
@@ -161,6 +171,19 @@ describe('tagColors', () => {
     expect(tagColors('checked_out', true)).toEqual({ background: '#0f2e4f', color: '#fff' });
     expect(tagColors('available', true)).toEqual({ background: '#0f2e4f', color: '#fff' });
   });
+
+  describe('on the dark stage', () => {
+    it('puts names on a dark chip in light status colors', () => {
+      expect(tagColors('checked_out', false, true)).toEqual({ background: '#1a1b1e', color: '#f87171' });
+      for (const status of ['available', undefined])
+        expect(tagColors(status, false, true), String(status)).toEqual({ background: '#1a1b1e', color: '#4ade80' });
+      expect(tagColors('inactive', false, true)).toEqual({ background: '#1a1b1e', color: '#e7e8ea' });
+    });
+
+    it('inverts the focused tag to navy on a light chip', () => {
+      expect(tagColors('checked_out', true, true)).toEqual({ background: '#e7e8ea', color: '#0f2e4f' });
+    });
+  });
 });
 
 describe('worldPerPixel', () => {
@@ -171,5 +194,54 @@ describe('worldPerPixel', () => {
 
   it('grows with depth so a marker keeps its screen size when zooming out', () => {
     expect(worldPerPixel(300, 28, 400)).toBeCloseTo(3 * worldPerPixel(100, 28, 400));
+  });
+});
+
+describe('pin size in the 3D scene', () => {
+  it('turns 2% of the map box width at the first view into a scene length', () => {
+    // 지도 상자 700px, 처음 화면에서 1px = 장면 3 → 지름 14px = 장면 42
+    expect(pinWorldDiameter(700, 3)).toBeCloseTo(42);
+  });
+
+  it('shows that scene length as 2% of the map box at the first view', () => {
+    const world = pinWorldDiameter(330, 2.5);
+    expect(pinScreenDiameter(world, 2.5)).toBeCloseTo(6.6);
+  });
+
+  it('grows on screen like a photo when zooming in', () => {
+    const world = pinWorldDiameter(330, 2.5);
+    // 2배 확대하면 1px이 장면 길이로 절반이 된다
+    expect(pinScreenDiameter(world, 1.25)).toBeCloseTo(13.2);
+  });
+});
+
+// three의 ACESFilmicToneMapping(OutputPass, 노출 1)과 같은 식 — 역보정 결과를 되돌려 확인한다
+function acesFilmic([r, g, b]: [number, number, number]): [number, number, number] {
+  const input = [
+    [0.59719, 0.35458, 0.04823],
+    [0.076, 0.90834, 0.01566],
+    [0.0284, 0.13383, 0.83777],
+  ];
+  const output = [
+    [1.60475, -0.53108, -0.07367],
+    [-0.10208, 1.10813, -0.00605],
+    [-0.00327, -0.07276, 1.07602],
+  ];
+  const mul = (m: number[][], v: number[]) => m.map((row) => row[0] * v[0] + row[1] * v[1] + row[2] * v[2]);
+  const fit = (v: number) => (v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.432951) + 0.238081);
+  const c = mul(input, [r / 0.6, g / 0.6, b / 0.6]).map(fit);
+  return mul(output, c).map((x) => Math.min(1, Math.max(0, x))) as [number, number, number];
+}
+
+const toSrgbByte = (linear: number) =>
+  Math.round(255 * (linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055));
+
+describe('acesFilmicInverse', () => {
+  it.each(Object.entries(PIN_COLORS))('makes %s balls come out as %s after tone mapping', (_, hex) => {
+    const input = acesFilmicInverse(hex);
+    expect(input.every((c) => c >= 0)).toBe(true);
+    const shown = acesFilmic(input).map(toSrgbByte);
+    const expected = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    shown.forEach((c, i) => expect(Math.abs(c - expected[i])).toBeLessThanOrEqual(1));
   });
 });

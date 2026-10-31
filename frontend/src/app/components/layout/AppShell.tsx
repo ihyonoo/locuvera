@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router';
+import BrandLogo from '../BrandLogo';
 import { cn } from '../ui/utils';
 import { getHomePath, getStoredAuthUser } from '../../lib/auth';
 
@@ -64,9 +65,7 @@ export default function AppShell({
           <nav className="app-shell__nav">
             {/* 로고는 홈 버튼 — 로그아웃 상태면 랜딩, 로그인 상태면 권한별 첫 화면으로 보낸다. */}
             <Link to={getHomePath(getStoredAuthUser())} className="brand-lockup">
-              <div className="brand-copy">
-                <strong>Locuvera</strong>
-              </div>
+              <BrandLogo className="brand-logo" />
             </Link>
             <div className="app-shell__actions flex flex-wrap items-center justify-end gap-x-[2.1rem] gap-y-3">
               {actions}

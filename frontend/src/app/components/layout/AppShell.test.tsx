@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import AppShell from './AppShell';
 import { storeAuthSession } from '../../lib/auth';
@@ -38,5 +38,10 @@ describe('AppShell brand logo', () => {
   it('links staff to the equipment search page', () => {
     signIn('staff');
     expect(renderShell()).toHaveAttribute('href', '/equipment');
+  });
+
+  it('shows the shield-and-wordmark logo inside the home link', () => {
+    const link = renderShell();
+    expect(within(link).getByRole('img', { name: 'Locuvera' })).toHaveClass('brand-logo');
   });
 });

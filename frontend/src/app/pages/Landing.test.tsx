@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import Landing from './Landing';
 
@@ -31,5 +31,16 @@ describe('Landing', () => {
 
     expect(screen.getByText('블록체인 무결성 검증')).toBeInTheDocument();
     expect(screen.getByText('실시간 위치 추적 (BLE 기반 RTLS)')).toBeInTheDocument();
+  });
+
+  it('shows the shield-and-wordmark logo in the nav', () => {
+    render(
+      <MemoryRouter>
+        <Landing />
+      </MemoryRouter>,
+    );
+
+    const brand = screen.getByRole('button', { name: 'Locuvera' });
+    expect(within(brand).getByRole('img', { name: 'Locuvera' })).toBeInTheDocument();
   });
 });

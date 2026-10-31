@@ -1,5 +1,6 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { getFloorMapInfo, type FloorNumber } from '../lib/floorMaps';
+import { PIN_SIZE_RATIO, pinDiameter, pinHitSize } from '../lib/mapPins';
 import {
   maxVisibleForPolygon,
   placeInPolygon,
@@ -43,15 +44,6 @@ function assetStatusDot(status: string | undefined) {
   return ASSET_STATUS_DOT[status ?? 'available'] ?? ASSET_STATUS_DOT.available;
 }
 
-// 마커 크기(px). 선택된 장비는 키우고 그 바깥에 퍼지는 링을 겹쳐 한눈에 찾게 한다.
-const DOT_SIZE = 14;
-const SPOTLIGHT_DOT_SIZE = 22;
-const SPOTLIGHT_RING_SIZE = 40;
-
-// 점 자체는 그대로 두되(밀집 구역에서 서로 겹치지 않도록), 탭하는 버튼의 히트 영역만
-// 넓힌다 — 점 크기(14px)는 터치 타겟 권장치보다 한참 작다.
-const MIN_TOUCH_HIT_SIZE = 28;
-
 export type FloorMapViewProps = {
   floor: FloorNumber;
   pins: FloorMapPin[];
@@ -68,9 +60,13 @@ export type FloorMapViewProps = {
   spotlightTagId?: string | null;
 };
 
+// pinSize: 일반 점 지름(px) — 지도 상자 폭의 2%라 지도와 함께 커지고 작아진다.
+// 선택된 장비는 키우고 그 바깥에 퍼지는 링을 겹쳐 한눈에 찾게 한다.
+// 점이 작아도 탭하는 버튼의 히트 영역은 터치 권장치(28px) 아래로 줄이지 않는다.
 function renderEquipmentMarker(
   dot: FloorMapEquipmentDot,
   position: ZonePoint,
+  pinSize: number,
   activeMarkerId: string | null,
   toggleMarker: (id: string) => void,
   onEquipmentClick?: (tagId: string) => void,
@@ -79,8 +75,9 @@ function renderEquipmentMarker(
   const status = assetStatusDot(dot.assetStatus);
   const isActive = activeMarkerId === dot.tag_id;
   const isSpotlighted = spotlightTagId === dot.tag_id;
-  const dotSize = isSpotlighted ? SPOTLIGHT_DOT_SIZE : DOT_SIZE;
-  const hitSize = Math.max(dotSize, MIN_TOUCH_HIT_SIZE);
+  const dotSize = isSpotlighted ? pinSize * PIN_SIZE_RATIO.spotlight : pinSize;
+  const ringSize = pinSize * PIN_SIZE_RATIO.ring;
+  const hitSize = pinHitSize(dotSize);
   return (
     <div key={dot.tag_id}>
       <button
@@ -99,7 +96,7 @@ function renderEquipmentMarker(
           <span
             data-testid={`floor-map-equipment-ring-${dot.tag_id}`}
             className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full opacity-70 ${status.className}`}
-            style={{ width: SPOTLIGHT_RING_SIZE, height: SPOTLIGHT_RING_SIZE }}
+            style={{ width: ringSize, height: ringSize }}
           />
         ) : null}
         <span
@@ -134,7 +131,21 @@ export default function FloorMapView({
   spotlightReaderIds = null,
 }: FloorMapViewProps) {
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mapWidth, setMapWidth] = useState(0);
   const floorInfo = getFloorMapInfo(floor);
+
+  // 지도 상자 폭을 재 핀 크기를 정한다. 그리기 전에 한 번 재고, 크기가 바뀌면 다시 잰다
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setMapWidth(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setMapWidth(el.getBoundingClientRect().width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const pinSize = pinDiameter(mapWidth);
   // 같은 화면에 지도가 여러 개 떠도 mask id가 겹치지 않게 한다.
   const maskId = `floor-map-spotlight-mask-${useId()}`;
   const spotlightPolygons = (spotlightReaderIds ?? [])
@@ -154,10 +165,16 @@ export default function FloorMapView({
 
   return (
     <div
+      ref={containerRef}
       data-testid="floor-map-container"
       className="relative w-full select-none overflow-hidden rounded-lg border border-border bg-card"
     >
-      <img src={floorInfo.imagePath} alt={`${floorInfo.label} 평면도`} className="block w-full" draggable={false} />
+      <img
+        src={floorInfo.imagePath}
+        alt={`${floorInfo.label} 평면도`}
+        className="floor-map__plan block w-full"
+        draggable={false}
+      />
 
       {spotlightReaderIds ? (
         <svg
@@ -196,7 +213,15 @@ export default function FloorMapView({
           const centroid = polygonCentroid(polygon);
           // 오목한 방은 면적 중심이 폴리곤 밖일 수 있다 — 그때는 경계에서 띄운 내부 자리를 찾는다.
           const position = pointInPolygon(centroid, polygon) ? centroid : placeInPolygon(polygon, dot.tag_id, []);
-          return renderEquipmentMarker(dot, position, activeMarkerId, toggleMarker, onEquipmentClick, spotlightTagId);
+          return renderEquipmentMarker(
+            dot,
+            position,
+            pinSize,
+            activeMarkerId,
+            toggleMarker,
+            onEquipmentClick,
+            spotlightTagId,
+          );
         }
 
         const maxVisible = maxVisibleForPolygon(polygon);
@@ -219,7 +244,15 @@ export default function FloorMapView({
         return (
           <div key={pin.reader_id}>
             {placed.map(({ dot, position }) =>
-              renderEquipmentMarker(dot, position, activeMarkerId, toggleMarker, onEquipmentClick, spotlightTagId),
+              renderEquipmentMarker(
+                dot,
+                position,
+                pinSize,
+                activeMarkerId,
+                toggleMarker,
+                onEquipmentClick,
+                spotlightTagId,
+              ),
             )}
             {clusterPosition ? (
               <div>

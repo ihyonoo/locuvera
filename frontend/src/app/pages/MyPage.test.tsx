@@ -202,3 +202,53 @@ describe('MyPage account actions for demo accounts', () => {
     expect(screen.queryByText(DEMO_NOTICE)).not.toBeInTheDocument();
   });
 });
+
+describe('MyPage screen theme', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    document.documentElement.classList.remove('dark');
+    storeSession('staff');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, user: { user_id: 1, username: 'u', display_name: 'u', role: 'staff' } }),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    document.documentElement.classList.remove('dark');
+  });
+
+  it('starts on light when nothing is stored', async () => {
+    renderMyPage();
+    const group = await screen.findByRole('radiogroup', { name: '화면 테마' });
+    expect(within(group).getByRole('radio', { name: '라이트' })).toBeChecked();
+    expect(within(group).getByRole('radio', { name: '다크' })).not.toBeChecked();
+  });
+
+  it('switches this device to dark right away', async () => {
+    renderMyPage();
+    const group = await screen.findByRole('radiogroup', { name: '화면 테마' });
+    fireEvent.click(within(group).getByRole('radio', { name: '다크' }));
+    expect(localStorage.getItem('locuvera-theme')).toBe('dark');
+    expect(document.documentElement).toHaveClass('dark');
+    expect(within(group).getByRole('radio', { name: '다크' })).toBeChecked();
+  });
+
+  it('switches back to light', async () => {
+    localStorage.setItem('locuvera-theme', 'dark');
+    document.documentElement.classList.add('dark');
+    renderMyPage();
+    const group = await screen.findByRole('radiogroup', { name: '화면 테마' });
+    expect(within(group).getByRole('radio', { name: '다크' })).toBeChecked();
+    fireEvent.click(within(group).getByRole('radio', { name: '라이트' }));
+    expect(localStorage.getItem('locuvera-theme')).toBe('light');
+    expect(document.documentElement).not.toHaveClass('dark');
+  });
+});

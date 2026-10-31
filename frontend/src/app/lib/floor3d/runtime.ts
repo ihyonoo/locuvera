@@ -1,10 +1,12 @@
-// 3D 지도 실행 중 판단(three.js 없이 계산만): 장비 이름표 비킴·색, 구슬 크기, 장비 층 갱신 여부, 품질 자동 조절.
+// 3D 지도 실행 중 판단(three.js 없이 계산만): 장비 이름표 비킴·색, 구슬 크기·색, 장비 층 갱신 여부, 품질 자동 조절.
+import { pinDiameter } from '../mapPins';
+
 export type Rect = { left: number; top: number; right: number; bottom: number };
 
-type TagDot = { id: string; x: number; y: number; w: number; h: number };
+// r: 점(구슬)의 현재 화면 반지름 — 핀이 지도와 함께 커지고 작아지므로 점마다 다르다
+type TagDot = { id: string; x: number; y: number; w: number; h: number; r: number };
 // 이름표 중심. moved: 점 바로 위 기본 자리를 비켜 났는가
 export type TagSpot = { x: number; y: number; moved: boolean };
-const DOT_R = 7; // 2D 지도 점(14px)의 반지름
 const DOT_GAP = 4;
 const TAG_GAP = 2;
 const BELOW_PENALTY = 4; // 점 아래는 위보다 이만큼 덜 선호
@@ -20,14 +22,14 @@ const overlaps = (a: Rect, b: Rect) =>
 export function placeTagLabels(dots: TagDot[], view: Rect): Map<string, TagSpot> {
   const out = new Map<string, TagSpot>();
   const taken: Rect[] = dots.map((d) => ({
-    left: d.x - DOT_R,
-    top: d.y - DOT_R,
-    right: d.x + DOT_R,
-    bottom: d.y + DOT_R,
+    left: d.x - d.r,
+    top: d.y - d.r,
+    right: d.x + d.r,
+    bottom: d.y + d.r,
   }));
   dots.forEach((d, i) => {
-    const above = d.y - DOT_R - DOT_GAP - d.h / 2;
-    const below = d.y + DOT_R + DOT_GAP + d.h / 2;
+    const above = d.y - d.r - DOT_GAP - d.h / 2;
+    const below = d.y + d.r + DOT_GAP + d.h / 2;
     const step = d.h + TAG_GAP;
     const half = d.w / 2 + TAG_GAP;
     const spots: { x: number; y: number; cost: number }[] = [];
@@ -91,16 +93,31 @@ function segmentThrough([ax, ay]: [number, number], [bx, by]: [number, number], 
 }
 
 const NAVY = '#0f2e4f';
-// 상태별 글씨 색: 점(#22c55e·#ef4444)과 같은 계열에서 흰 바탕 대비 4.5:1을 넘는 색. 비활성은 남색
+// 상태별 글씨 색: 핀과 같은 계열에서 칩 바탕 대비 4.5:1을 넘는 색. 비활성은 본문색
+// 라이트: 흰 칩 / 다크: 어두운 칩(--card #1a1b1e)에 밝은 상태 색, 본문색 #e7e8ea
 const STATUS_TEXT: Record<string, string> = { available: '#15803d', checked_out: '#dc2626' };
+const STATUS_TEXT_DARK: Record<string, string> = { available: '#4ade80', checked_out: '#f87171' };
+const DARK_CHIP = '#1a1b1e';
+const DARK_TEXT = '#e7e8ea';
 
-// 이름표 바탕·글씨 색. 고른 장비는 남색 바탕, 나머지는 흰 바탕에 상태 색 글씨. 상태가 없으면 점처럼 사용 가능으로 본다
-export function tagColors(assetStatus: string | undefined, focused: boolean): { background: string; color: string } {
+// 이름표 바탕·글씨 색. 고른 장비는 바탕과 글씨를 뒤집어 눈에 띄게 하고, 나머지는 칩 위에 상태 색 글씨.
+// 상태가 없으면 점처럼 사용 가능으로 본다
+export function tagColors(
+  assetStatus: string | undefined,
+  focused: boolean,
+  dark = false,
+): { background: string; color: string } {
+  const status = assetStatus ?? 'available';
+  if (dark) {
+    if (focused) return { background: DARK_TEXT, color: NAVY };
+    return { background: DARK_CHIP, color: STATUS_TEXT_DARK[status] ?? DARK_TEXT };
+  }
   if (focused) return { background: NAVY, color: '#fff' };
-  return { background: '#fff', color: STATUS_TEXT[assetStatus ?? 'available'] ?? NAVY };
+  return { background: '#fff', color: STATUS_TEXT[status] ?? NAVY };
 }
 
-// 원근 카메라에서 화면 1px이 그 깊이(카메라 앞 방향 거리)의 장면 단위로 얼마인가. 구슬을 확대와 관계없이 같은 화면 크기로 그린다
+// 원근 카메라에서 화면 1px이 그 깊이(카메라 앞 방향 거리)의 장면 단위로 얼마인가
+// 구슬의 장면 지름과 화면 px 사이를 바꿀 때 쓴다
 export function worldPerPixel(depth: number, fovDeg: number, viewportHeight: number): number {
   return (2 * depth * Math.tan((fovDeg * Math.PI) / 360)) / viewportHeight;
 }
@@ -148,4 +165,56 @@ export function createQualityGovernor() {
       return level;
     },
   };
+}
+
+// 처음 화면(층 전체)에서 지도 상자 폭의 2%인 핀 지름을 장면 길이로 바꾼다
+// fitWorldPerPixel: 그때 목표점 깊이에서 화면 1px의 장면 길이
+export function pinWorldDiameter(mapWidthPx: number, fitWorldPerPixel: number): number {
+  return pinDiameter(mapWidthPx) * fitWorldPerPixel;
+}
+
+// 장면 속 지름이 지금 화면에서 몇 px인가
+export function pinScreenDiameter(worldDiameter: number, worldPerPx: number): number {
+  return worldDiameter / worldPerPx;
+}
+
+// three의 ACESFilmicToneMapping이 쓰는 행렬(셰이더의 열 우선 mat3를 행 기준으로 옮겼다)
+const ACES_INPUT = [
+  [0.59719, 0.35458, 0.04823],
+  [0.076, 0.90834, 0.01566],
+  [0.0284, 0.13383, 0.83777],
+];
+const ACES_OUTPUT = [
+  [1.60475, -0.53108, -0.07367],
+  [-0.10208, 1.10813, -0.00605],
+  [-0.00327, -0.07276, 1.07602],
+];
+
+function solve3(m: number[][], v: number[]): number[] {
+  const det = (a: number[][]) =>
+    a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) -
+    a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
+    a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+  const d = det(m);
+  // 크라메르 공식
+  return [0, 1, 2].map((col) => det(m.map((row, i) => row.map((x, j) => (j === col ? v[i] : x)))) / d);
+}
+
+// RRTAndODTFit(v) = (v² + 0.0245786v − 0.000090537) / (0.983729v² + 0.432951v + 0.238081)의 역함수(양의 근)
+function invertAcesFit(y: number): number {
+  const a = 1 - 0.983729 * y;
+  const b = 0.0245786 - 0.432951 * y;
+  const c = -(0.000090537 + 0.238081 * y);
+  return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+}
+
+// 마지막 OutputPass가 화면 전체에 ACES 톤 매핑을 걸어 3D 구슬 색이 바랜다(재질의 toneMapped로는 못 막는다)
+// 톤 매핑 뒤 hex가 그대로 나오도록 재질에 넣을 선형 입력색을 거꾸로 구한다
+export function acesFilmicInverse(hex: string, exposure = 1): [number, number, number] {
+  const target = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  const fitted = solve3(ACES_OUTPUT, target).map(invertAcesFit);
+  return solve3(ACES_INPUT, fitted).map((x) => (x * 0.6) / exposure) as [number, number, number];
 }

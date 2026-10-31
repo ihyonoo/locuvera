@@ -4,6 +4,28 @@
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta name="theme-color" content="#f1f1f1" />
+      <link rel="icon" href="/favicon.ico" sizes="any" />
+      <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      <!-- 개발 서버는 CSS를 JS로 넣어 첫 프레임에 토큰이 없다 — 다크 배경만 먼저 칠한다. 인쇄는 라이트 -->
+      <style>
+        @media screen { html.dark { background: #111214; color-scheme: dark; } }
+      </style>
+      <!-- 첫 페인트 전에 저장된 테마를 적용한다. 목록·키·정규화는 src/app/lib/theme.ts와 같아야 한다(theme.test.ts가 확인) -->
+      <script>
+        (function () {
+          try {
+            var light = ["/","/login","/signup","/signup/complete","/find-id","/forgot-password","/reset-password","/verify-email"];
+            var path = location.pathname.replace(/\/+$/, '') || '/';
+            if (localStorage.getItem('locuvera-theme') === 'dark' && light.indexOf(path) < 0) {
+              document.documentElement.classList.add('dark');
+              var meta = document.querySelector('meta[name="theme-color"]');
+              if (meta) meta.setAttribute('content', '#1a1b1e');
+            }
+          } catch (e) {}
+        })();
+      </script>
       <title>Locuvera</title>
     </head>
 
