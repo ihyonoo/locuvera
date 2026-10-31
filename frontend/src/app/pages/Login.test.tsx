@@ -33,6 +33,22 @@ describe('Login role picker', () => {
     vi.restoreAllMocks();
   });
 
+  it('puts the badge-type tabs above the title, not under the password', () => {
+    renderLogin();
+    const tabs = screen.getByRole('radiogroup', { name: '로그인 권한' });
+    const heading = screen.getByRole('heading', { name: 'Login' });
+    expect(tabs.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      tabs.compareDocumentPosition(screen.getByLabelText('비밀번호')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps the title as Login whichever badge is picked', () => {
+    renderLogin();
+    fireEvent.click(roleOption('관리자'));
+    expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument();
+  });
+
   it('offers both roles as visible choices instead of a dropdown', () => {
     renderLogin();
     expect(roleOption('의료진')).toBeInTheDocument();
@@ -54,7 +70,7 @@ describe('Login role picker', () => {
 
     fireEvent.change(screen.getByLabelText('아이디'), { target: { value: 'a@b.com' } });
     fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'pw' } });
-    fireEvent.click(screen.getByRole('button', { name: '로그인' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 
     await waitFor(() => {
       const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string);
@@ -93,7 +109,7 @@ describe('Login demo buttons', () => {
 
   it('requests a staff demo session without credentials', async () => {
     renderLogin();
-    fireEvent.click(screen.getByRole('button', { name: '의료진으로 둘러보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '의료진 데모' }));
 
     await waitFor(() => {
       const { url, body } = firstCall();
@@ -104,7 +120,7 @@ describe('Login demo buttons', () => {
 
   it('requests an admin demo session', async () => {
     renderLogin();
-    fireEvent.click(screen.getByRole('button', { name: '관리자로 둘러보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '관리자 데모' }));
 
     await waitFor(() => {
       expect(firstCall().body.role).toBe('admin');
@@ -113,7 +129,7 @@ describe('Login demo buttons', () => {
 
   it('stores the issued demo session', async () => {
     renderLogin();
-    fireEvent.click(screen.getByRole('button', { name: '의료진으로 둘러보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '의료진 데모' }));
 
     await waitFor(() => {
       const stored = JSON.parse(sessionStorage.getItem('auth_session') ?? '{}');
@@ -128,8 +144,35 @@ describe('Login demo buttons', () => {
       json: async () => ({ detail: '데모 로그인이 비활성화되어 있습니다.' }),
     } as Response);
     renderLogin();
-    fireEvent.click(screen.getByRole('button', { name: '의료진으로 둘러보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '의료진 데모' }));
 
     expect(await screen.findByText('데모 로그인이 비활성화되어 있습니다.')).toBeInTheDocument();
+  });
+});
+
+describe('Login fields', () => {
+  it('offers the demo buttons without an explanatory sentence', () => {
+    renderLogin();
+    expect(screen.getByRole('button', { name: '의료진 데모' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '관리자 데모' })).toBeInTheDocument();
+    expect(screen.queryByText(/데모 계정으로 체험/)).not.toBeInTheDocument();
+  });
+
+  it('has only the title above the form, no subtitle', () => {
+    renderLogin();
+    expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument();
+    expect(document.querySelector('.auth-split__subtitle')).toBeNull();
+  });
+
+  it('shows Username/Password inside the boxes and keeps the labels only for screen readers', () => {
+    renderLogin();
+    for (const [name, placeholder] of [
+      ['아이디', 'Username'],
+      ['비밀번호', 'Password'],
+    ]) {
+      const input = screen.getByLabelText(name);
+      expect(input).toHaveAttribute('placeholder', placeholder);
+      expect(document.querySelector(`label[for="${input.id}"]`)).toHaveClass('sr-only');
+    }
   });
 });

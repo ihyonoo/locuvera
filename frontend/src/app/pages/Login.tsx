@@ -139,15 +139,38 @@ export default function Login() {
     navigate(withRedirectQuery('/signup', redirectTarget));
   };
 
+  // 어떤 출입증으로 들어갈지 먼저 고른다 — 카드 맨 위 탭.
+  // 선택지가 둘뿐이라 드롭다운 대신 한눈에 보이는 라디오로 둔다.
+  const badgeTabs = (
+    <div className="auth-split__badge-tabs" role="radiogroup" aria-label="로그인 권한">
+      {ROLE_OPTIONS.map((item) => (
+        <label key={item.value}>
+          <input
+            type="radio"
+            name="login-role"
+            value={item.value}
+            checked={role === item.value}
+            onChange={() => setRole(item.value)}
+            className="sr-only"
+          />
+          <span>{item.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+
   return (
-    <AuthSplitLayout title="로그인" subtitle="장비의 위치와 사용 이력을 확인하려면 로그인해 주세요.">
+    <AuthSplitLayout title="Login" beforeTitle={badgeTabs}>
       <form onSubmit={handleLogin} className="space-y-5">
+        {/* 입력칸 안에 항목 이름을 두고, 라벨은 화면 낭독기용으로만 남긴다. */}
         <div className="space-y-2">
-          <Label htmlFor="email">아이디</Label>
+          <Label htmlFor="email" className="sr-only">
+            아이디
+          </Label>
           <Input
             id="email"
             type="text"
-            placeholder="test"
+            placeholder="Username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -155,37 +178,17 @@ export default function Login() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">비밀번호</Label>
+          <Label htmlFor="password" className="sr-only">
+            비밀번호
+          </Label>
           <Input
             id="password"
             type="password"
-            placeholder="••••••••"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-        </div>
-
-        <div className="space-y-2">
-          <Label>로그인 권한</Label>
-          {/* 선택지가 둘뿐이라 드롭다운 대신 한눈에 보이는 라디오 세그먼트로 둔다. */}
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="로그인 권한">
-            {ROLE_OPTIONS.map((item) => (
-              <label key={item.value} className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="login-role"
-                  value={item.value}
-                  checked={role === item.value}
-                  onChange={() => setRole(item.value)}
-                  className="peer sr-only"
-                />
-                <span className="flex h-12 items-center justify-center rounded-md border border-input bg-input-background text-[0.98rem] tracking-[-0.01em] text-muted-foreground transition-[border-color,box-shadow,background-color,color] peer-checked:border-primary peer-checked:bg-secondary peer-checked:font-medium peer-checked:text-foreground peer-focus-visible:border-ring peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/40">
-                  {item.label}
-                </span>
-              </label>
-            ))}
-          </div>
         </div>
 
         {error ? (
@@ -205,7 +208,7 @@ export default function Login() {
         {resendMsg ? <div className="alert alert-success">{resendMsg}</div> : null}
 
         <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-          {isLoading ? '로그인 중...' : '로그인'}
+          {isLoading ? 'Logging in...' : 'Login'}
         </Button>
 
         <div className="auth-split__links">
@@ -229,30 +232,25 @@ export default function Login() {
 
         <GoogleButton mode="login" />
 
-        <div className="space-y-2">
-          <p className="text-center text-[0.85rem] text-muted-foreground">
-            가입 없이 둘러보려면 데모 계정으로 체험해 보세요.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              onClick={() => handleDemoLogin('staff')}
-              disabled={isLoading}
-            >
-              의료진으로 둘러보기
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              onClick={() => handleDemoLogin('admin')}
-              disabled={isLoading}
-            >
-              관리자로 둘러보기
-            </Button>
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() => handleDemoLogin('staff')}
+            disabled={isLoading}
+          >
+            의료진 데모
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() => handleDemoLogin('admin')}
+            disabled={isLoading}
+          >
+            관리자 데모
+          </Button>
         </div>
       </form>
     </AuthSplitLayout>

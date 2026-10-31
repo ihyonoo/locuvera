@@ -38,7 +38,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <AuthSplitLayout title="비밀번호 찾기" subtitle="가입 이메일로 비밀번호 재설정 링크를 보내드립니다.">
+    <AuthSplitLayout title="Forgot password" subtitle="가입 이메일로 비밀번호 재설정 링크를 보내드립니다.">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="email">이메일</Label>
@@ -56,7 +56,7 @@ export default function ForgotPassword() {
         {message ? <div className="alert alert-success">{message}</div> : null}
 
         <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-          {isLoading ? '전송 중...' : '재설정 메일 보내기'}
+          {isLoading ? 'Sending...' : 'Send reset link'}
         </Button>
 
         <div className="auth-split__links">

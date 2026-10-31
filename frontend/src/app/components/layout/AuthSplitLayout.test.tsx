@@ -35,11 +35,30 @@ describe('AuthSplitLayout', () => {
     expect(within(link).getByRole('img', { name: 'Locuvera' })).toBeInTheDocument();
   });
 
-  it('puts the logo above the form, not over the photo', () => {
-    renderAt('/login');
-    const link = screen.getByRole('link', { name: 'Locuvera' });
-    expect(link.closest('.auth-split__form')).not.toBeNull();
-    expect(link.closest('.auth-split__media')).toBeNull();
+  it('puts the logo, title and form on one ID-badge card with no background photo', () => {
+    const { container } = renderAt('/login');
+    const card = container.querySelector('.auth-split__card');
+    expect(card).not.toBeNull();
+    for (const el of [
+      screen.getByRole('link', { name: 'Locuvera' }),
+      screen.getByRole('heading', { name: '로그인' }),
+      screen.getByText('폼'),
+    ]) {
+      expect(card).toContainElement(el);
+    }
+    expect(container.querySelector('.auth-split__media')).toBeNull();
+    expect(container.querySelector('img:not([role])')).toBeNull();
+  });
+
+  it('hangs from two straps through holes at the top-left and top-right corners, all hidden from assistive tech', () => {
+    const { container } = renderAt('/login');
+    for (const side of ['left', 'right']) {
+      for (const part of ['strap', 'hole']) {
+        expect(container.querySelector(`.auth-split__${part}--${side}`)).toHaveAttribute('aria-hidden', 'true');
+      }
+    }
+    expect(container.querySelectorAll('.auth-split__strap')).toHaveLength(2);
+    expect(container.querySelector('.auth-split__chip')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('goes to the landing page when the logo is clicked', () => {
@@ -53,5 +72,20 @@ describe('AuthSplitLayout', () => {
     expect(screen.getByRole('heading', { name: '로그인' })).toBeInTheDocument();
     expect(screen.getByText('부제')).toBeInTheDocument();
     expect(screen.getByText('폼')).toBeInTheDocument();
+  });
+});
+
+describe('AuthSplitLayout extras', () => {
+  it('puts the beforeTitle slot above the title', () => {
+    render(
+      <MemoryRouter>
+        <AuthSplitLayout title="Login" beforeTitle={<div>출입증 종류</div>}>
+          <form>폼</form>
+        </AuthSplitLayout>
+      </MemoryRouter>,
+    );
+    const slot = screen.getByText('출입증 종류');
+    const heading = screen.getByRole('heading', { name: 'Login' });
+    expect(slot.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

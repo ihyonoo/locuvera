@@ -45,7 +45,7 @@ export default function VerifyEmail() {
   }, [searchParams]);
 
   return (
-    <AuthSplitLayout title="이메일 인증">
+    <AuthSplitLayout title="Verify email">
       <div className="space-y-5">
         {status === 'loading' ? <div className="alert">{message}</div> : null}
         {status === 'success' ? <div className="alert alert-success">{message}</div> : null}
@@ -53,7 +53,7 @@ export default function VerifyEmail() {
 
         {status !== 'loading' ? (
           <Button className="w-full" size="lg" onClick={() => navigate(LOGIN_PATH, { replace: true })}>
-            로그인하러 가기
+            Go to login
           </Button>
         ) : null}
       </div>

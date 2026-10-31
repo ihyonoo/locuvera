@@ -59,7 +59,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <AuthSplitLayout title="비밀번호 재설정" subtitle="새 비밀번호를 입력해 주세요.">
+    <AuthSplitLayout title="Reset password" subtitle="새 비밀번호를 입력해 주세요.">
       {!token ? (
         <div className="alert alert-error">유효하지 않은 재설정 링크입니다. 메일의 링크를 다시 확인해 주세요.</div>
       ) : (
@@ -93,7 +93,7 @@ export default function ResetPassword() {
           {success ? <div className="alert alert-success">{success}</div> : null}
 
           <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-            {isLoading ? '변경 중...' : '비밀번호 변경'}
+            {isLoading ? 'Updating...' : 'Change password'}
           </Button>
         </form>
       )}

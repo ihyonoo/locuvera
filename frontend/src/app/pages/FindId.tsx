@@ -38,7 +38,7 @@ export default function FindId() {
   };
 
   return (
-    <AuthSplitLayout title="아이디 찾기" subtitle="가입 시 등록한 이메일을 입력하면 아이디를 메일로 보내드립니다.">
+    <AuthSplitLayout title="Find ID" subtitle="가입 시 등록한 이메일을 입력하세요.">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="email">이메일</Label>
@@ -56,7 +56,7 @@ export default function FindId() {
         {message ? <div className="alert alert-success">{message}</div> : null}
 
         <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-          {isLoading ? '전송 중...' : '아이디 찾기'}
+          {isLoading ? 'Sending...' : 'Find ID'}
         </Button>
 
         <div className="auth-split__links">
