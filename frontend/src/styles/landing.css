@@ -74,16 +74,26 @@
   padding-block: 0.9rem;
 }
 
-/* 맨 위로 돌려보내는 버튼 — 기본 button 스타일은 걷어내고 텍스트만 남긴다 */
+/* 맨 위로 돌려보내는 버튼 — 기본 button 스타일은 걷어내고 로고만 남긴다.
+   로고의 방패 왼쪽·"Locu"는 이 버튼 글자색(히어로 위 흰색, 스크롤 후 남색)을 따른다 */
 .landing__brand {
   padding: 0;
   border: none;
   background: none;
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
   color: #ffffff;
   cursor: pointer;
+}
+
+/* 높이 = 예전 글자 로고 1.5rem × 방패 1.1 */
+.landing__brand svg {
+  display: block;
+  height: 1.65rem;
+  width: auto;
+  transition: opacity 0.15s ease;
+}
+
+.landing__brand:hover svg {
+  opacity: 0.8;
 }
 
 .landing__nav-links {
@@ -591,9 +601,9 @@
     display: none;
   }
 
-  /* 좁은 화면에서 상단바 높이에 맞도록 브랜드 글자를 줄인다. */
-  .landing__brand {
-    font-size: 1rem;
+  /* 좁은 화면에서 상단바 높이에 맞도록 로고를 줄인다(예전 글자 1rem × 방패 1.1). */
+  .landing__brand svg {
+    height: 1.1rem;
   }
 
   .landing__section-title {

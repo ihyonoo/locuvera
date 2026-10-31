@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'motion/react';
+import BrandLogo from '../components/BrandLogo';
 import '../../styles/landing.css';
 
 const CONTACT_EMAIL = 'hyunu.choe@gmail.com';
@@ -84,7 +85,7 @@ export default function Landing() {
             className="landing__brand"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            Locuvera
+            <BrandLogo />
           </button>
           <nav className="landing__nav-links">
             <a className="landing__nav-link" href="#features">

@@ -376,39 +376,25 @@
     padding: 1.75rem 0 3.5rem;
   }
 
-  /* 홈으로 가는 링크 — 밑줄 없이 색만 반응시킨다 */
+  /* 홈으로 가는 링크 — 밑줄 없이, 올리면 로고만 살짝 흐려진다 */
   .brand-lockup {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
     min-width: 0;
     text-decoration: none;
   }
 
-  .brand-lockup:hover .brand-copy strong {
-    color: var(--primary);
-  }
-
-  .brand-copy {
-    display: grid;
-    gap: 0.05rem;
-    min-width: 0;
-  }
-
-  /* 랜딩 로고(.landing__brand)와 동일한 타이포 */
-  .brand-copy strong {
+  /* 방패+글자 로고(BrandLogo). 높이 = 예전 글자 로고 1.5rem × 방패 1.1. 방패 왼쪽·"Locu"는 글자색을 따른다 */
+  .brand-logo {
     display: block;
+    height: 1.65rem;
+    width: auto;
     color: var(--foreground);
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
+    transition: opacity 0.15s ease;
   }
 
-  .brand-copy span {
-    color: var(--muted-foreground);
-    font-size: 0.75rem;
-    letter-spacing: 0;
+  .brand-lockup:hover .brand-logo {
+    opacity: 0.8;
   }
 
   .page-header {
@@ -591,7 +577,6 @@
       0 0 0 3px #fff,
       0 0 0 5px rgb(15 23 42 / 0.35),
       0 0 16px 6px rgb(255 255 255 / 0.65);
-    filter: brightness(1.25) saturate(1.3);
   }
 
   .text-ok { color: var(--ok-fg); }
@@ -687,15 +672,11 @@
       padding-top: 1.5rem;
     }
 
-    .brand-copy span {
-      display: none;
-    }
-
     /* AdminNav/StaffNav가 이 폭에서는 햄버거 아이콘 하나로 접혀 있어, 로고 옆에 나란히
        한 줄로 들어간다 — width:100%로 액션 영역을 강제로 새 줄로 밀던 예전 규칙(탭 6개가
        나열되던 시절 것)은 이제 아이콘 하나를 불필요하게 줄바꿈시키기만 해서 제거한다. */
-    .brand-copy strong {
-      font-size: 1rem;
+    .brand-logo {
+      height: 1.1rem;
     }
   }
 }
@@ -830,13 +811,11 @@
 }
 
 /* ── 인증 화면 split 레이아웃 ─────────────────────────────── */
-/* 레이어 밖 규칙이라 .app-shell__content의 패딩을 덮어쓴다 */
-
+/* 상단바 없이 화면 전체를 쓴다. 랜딩으로 가는 로고는 폼 칸 왼쪽 위(.auth-brand)에 있다 */
 .auth-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  /* 상단바(min-height 4.8rem + border 1px) 아래를 화면 끝까지 채운다 */
-  height: calc(100vh - 4.8rem - 1px);
+  height: 100vh;
   padding: 0;
   background: var(--app-panel-background);
 }
@@ -849,9 +828,29 @@
 
 .auth-split__form {
   display: flex;
+  flex-direction: column;
   overflow-y: auto;
   border-left: 1px solid var(--border);
   padding: clamp(2rem, 4vw, 3.5rem) clamp(1.5rem, 4vw, 3.5rem);
+}
+
+/* 폼 칸 왼쪽 위 로고 — 문서 흐름 안에 있어 긴 폼과 겹치지 않는다. 인증 화면은 늘 라이트라 컬러 로고다 */
+.auth-brand {
+  align-self: flex-start;
+  margin-bottom: 1.5rem;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.auth-brand__logo {
+  display: block;
+  height: 1.65rem;
+  width: auto;
+  transition: opacity 0.15s ease;
+}
+
+.auth-brand:hover .auth-brand__logo {
+  opacity: 0.8;
 }
 
 /* align-items:center 대신 margin:auto — 내용이 넘칠 때 위쪽이 잘리지 않는다 */
