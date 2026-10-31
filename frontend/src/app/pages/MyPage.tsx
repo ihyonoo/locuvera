@@ -18,7 +18,7 @@ import {
   storeAuthSession,
   type AuthUser,
 } from '../lib/auth';
-import { API_BASE_URL } from '../lib/runtime';
+import { API_BASE_URL, isGoogleLoginEnabled } from '../lib/runtime';
 import { getStoredTheme, storeTheme, syncThemeForPath, type Theme } from '../lib/theme';
 
 type MeUser = AuthUser & { created_at?: string | null; google_linked?: boolean };
@@ -341,7 +341,9 @@ export default function MyPage() {
                   </>
                 ) : null}
                 <InfoField label="가입일" value={formatDate(user.created_at)} />
-                <InfoField label="Google 연동" value={user.google_linked ? '연동됨' : '미연동'} />
+                {isGoogleLoginEnabled() ? (
+                  <InfoField label="Google 연동" value={user.google_linked ? '연동됨' : '미연동'} />
+                ) : null}
               </dl>
             </section>
 
@@ -509,30 +511,32 @@ export default function MyPage() {
               ) : null}
             </section>
 
-            {/* Google 연동 */}
-            <section className="surface-panel p-6 fade-rise">
-              <div className="panel-title mb-1">Google 연동</div>
-              <p className="panel-copy mb-4">
-                {user.google_linked
-                  ? '이 계정은 Google 로그인과 연동되어 있습니다.'
-                  : '동일한 인증 이메일로 Google 로그인하면 이 계정에 자동으로 연동됩니다.'}
-              </p>
-              {googleMsg ? (
-                <div className={`mb-4 ${googleMsg.tone === 'ok' ? 'alert alert-success' : 'alert alert-error'}`}>
-                  {googleMsg.text}
-                </div>
-              ) : null}
-              {demoBlocked === 'google' ? <div className="alert alert-error mb-4">{DEMO_NOTICE}</div> : null}
-              {user.google_linked ? (
-                <Button variant="outline" onClick={unlinkGoogle} disabled={googleBusy}>
-                  {googleBusy ? '해제 중...' : 'Google 연동 해제'}
-                </Button>
-              ) : (
-                <Button variant="outline" onClick={linkGoogle}>
-                  Google 계정 연동
-                </Button>
-              )}
-            </section>
+            {/* Google 연동 — Google 로그인이 켜져 있을 때만 */}
+            {isGoogleLoginEnabled() ? (
+              <section className="surface-panel p-6 fade-rise">
+                <div className="panel-title mb-1">Google 연동</div>
+                <p className="panel-copy mb-4">
+                  {user.google_linked
+                    ? '이 계정은 Google 로그인과 연동되어 있습니다.'
+                    : '동일한 인증 이메일로 Google 로그인하면 이 계정에 자동으로 연동됩니다.'}
+                </p>
+                {googleMsg ? (
+                  <div className={`mb-4 ${googleMsg.tone === 'ok' ? 'alert alert-success' : 'alert alert-error'}`}>
+                    {googleMsg.text}
+                  </div>
+                ) : null}
+                {demoBlocked === 'google' ? <div className="alert alert-error mb-4">{DEMO_NOTICE}</div> : null}
+                {user.google_linked ? (
+                  <Button variant="outline" onClick={unlinkGoogle} disabled={googleBusy}>
+                    {googleBusy ? '해제 중...' : 'Google 연동 해제'}
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={linkGoogle}>
+                    Google 계정 연동
+                  </Button>
+                )}
+              </section>
+            ) : null}
 
             {/* 내 사용 이력 (staff 전용) */}
             {isStaff ? (

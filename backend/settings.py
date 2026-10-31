@@ -59,6 +59,8 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "") or SMTP_USER
 
 # Google OAuth 2.0 (authorization code / redirect).
+# 기본 꺼짐 — 병원 계정이 아닌 개인 Google 계정으로 들어오지 않게 한다. 켜려면 true + 아래 키
+GOOGLE_LOGIN_ENABLED = os.getenv("GOOGLE_LOGIN_ENABLED", "false").strip().lower() in ("1", "true", "yes")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")

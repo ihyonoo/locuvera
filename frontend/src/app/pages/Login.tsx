@@ -6,7 +6,7 @@ import { Label } from '../components/ui/label';
 import AuthSplitLayout from '../components/layout/AuthSplitLayout';
 import GoogleButton from '../components/GoogleButton';
 import { getHomePath, getRedirectTarget, storeAuthSession, withRedirectQuery } from '../lib/auth';
-import { API_BASE_URL } from '../lib/runtime';
+import { API_BASE_URL, isGoogleLoginEnabled } from '../lib/runtime';
 
 const ROLE_OPTIONS = [
   { value: 'staff', label: '의료진' },
@@ -226,11 +226,15 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="auth-split__divider">
-          <span>또는</span>
-        </div>
+        {isGoogleLoginEnabled() ? (
+          <>
+            <div className="auth-split__divider">
+              <span>또는</span>
+            </div>
 
-        <GoogleButton mode="login" />
+            <GoogleButton mode="login" />
+          </>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2">
           <Button

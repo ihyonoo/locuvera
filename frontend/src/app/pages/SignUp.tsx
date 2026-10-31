@@ -11,7 +11,7 @@ import PasswordChecklist from '../components/PasswordChecklist';
 import PasswordMatchHint from '../components/PasswordMatchHint';
 import { getPasswordError } from '../lib/passwordPolicy';
 import { getRedirectTarget, withRedirectQuery, LOGIN_PATH } from '../lib/auth';
-import { API_BASE_URL } from '../lib/runtime';
+import { API_BASE_URL, isGoogleLoginEnabled } from '../lib/runtime';
 
 const POSITION_OPTIONS = ['간호사', '의사', '간호조무사', '방사선사', '임상병리사', '물리치료사', '기타'];
 const ROLE_OPTIONS = [
@@ -236,11 +236,15 @@ export default function SignUp() {
           </button>
         </div>
 
-        <div className="auth-split__divider">
-          <span>또는</span>
-        </div>
+        {isGoogleLoginEnabled() ? (
+          <>
+            <div className="auth-split__divider">
+              <span>또는</span>
+            </div>
 
-        <GoogleButton mode="signup" label="Google로 가입하기" />
+            <GoogleButton mode="signup" label="Google로 가입하기" />
+          </>
+        ) : null}
       </form>
     </AuthSplitLayout>
   );

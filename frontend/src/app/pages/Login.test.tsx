@@ -176,3 +176,20 @@ describe('Login fields', () => {
     }
   });
 });
+
+describe('Login Google switch', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('hides the Google button and the divider while Google login is off (default)', () => {
+    renderLogin();
+    expect(screen.queryByRole('button', { name: 'Google로 계속하기' })).not.toBeInTheDocument();
+    expect(screen.queryByText('또는')).not.toBeInTheDocument();
+  });
+
+  it('shows them when VITE_GOOGLE_LOGIN_ENABLED is true', () => {
+    vi.stubEnv('VITE_GOOGLE_LOGIN_ENABLED', 'true');
+    renderLogin();
+    expect(screen.getByRole('button', { name: 'Google로 계속하기' })).toBeInTheDocument();
+    expect(screen.getByText('또는')).toBeInTheDocument();
+  });
+});

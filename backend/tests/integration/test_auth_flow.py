@@ -148,7 +148,28 @@ class TestLogin:
         assert response.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "kwargs"),
+    [
+        ("get", "/auth/google/start", {}),
+        ("get", "/auth/google/callback", {"params": {"code": "code", "state": "state"}}),
+        (
+            "post",
+            "/auth/google/complete",
+            {"json": {"pending_token": "t", "username": "someone", "password": "Str0ng!Passw0rd", "role": "staff"}},
+        ),
+    ],
+)
+def test_google_login_endpoints_return_404_when_disabled(client, monkeypatch, method, path, kwargs):
+    monkeypatch.setattr("backend.server.GOOGLE_LOGIN_ENABLED", False)
+
+    response = getattr(client, method)(path, follow_redirects=False, **kwargs)
+
+    assert response.status_code == 404
+
+
 def test_google_callback_rejects_unverified_email_before_account_link(client, seed_user, db_conn, monkeypatch):
+    monkeypatch.setattr("backend.server.GOOGLE_LOGIN_ENABLED", True)
     seed_user(username="linked_user", email="linked@example.com")
     monkeypatch.setattr(
         google_oauth,
@@ -174,7 +195,8 @@ def test_google_callback_rejects_unverified_email_before_account_link(client, se
         assert cur.fetchone()[0] == 0
 
 
-def test_google_complete_rejects_old_pending_unverified_email(client, db_conn):
+def test_google_complete_rejects_old_pending_unverified_email(client, db_conn, monkeypatch):
+    monkeypatch.setattr("backend.server.GOOGLE_LOGIN_ENABLED", True)
     pending = create_action_token(
         purpose="oauth_pending",
         ttl_sec=300,
