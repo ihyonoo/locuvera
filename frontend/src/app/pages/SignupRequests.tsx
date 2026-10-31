@@ -100,7 +100,8 @@ function ApproveDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    // 저장 중에 닫으면 결과가 사라지고, 늦게 온 응답이 다른 요청의 대화상자를 닫는다.
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>가입 승인</DialogTitle>
@@ -108,7 +109,8 @@ function ApproveDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
         </DialogHeader>
         <DialogBody className="space-y-5">
           <div className="alert alert-warn">
-            이메일이 요청자 본인 것인지 확인한 뒤 승인하세요. 승인하면 이 이메일로 비밀번호 설정 링크가 갑니다.
+            사번·이름·이메일이 같은 직원의 것인지 확인한 뒤 승인하세요. 승인하면 이 이메일로 비밀번호 설정 링크가
+            갑니다.
           </div>
 
           <div className="space-y-2">
@@ -171,7 +173,7 @@ function ApproveDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
           {error ? <div className="alert alert-error">{error}</div> : null}
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               취소
             </Button>
             <Button type="button" onClick={approve} disabled={isSaving}>
@@ -207,7 +209,8 @@ function RejectDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    // 저장 중에 닫으면 결과가 사라지고, 늦게 온 응답이 다른 요청의 대화상자를 닫는다.
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>가입 요청 거절</DialogTitle>
@@ -217,7 +220,7 @@ function RejectDialog({ item, onDone, onClose, onUnauthorized }: DialogProps) {
           <p className="text-sm text-muted-foreground">요청을 지웁니다. 요청자에게는 알리지 않습니다.</p>
           {error ? <div className="alert alert-error">{error}</div> : null}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               취소
             </Button>
             <Button type="button" variant="destructive" onClick={reject} disabled={isSaving}>

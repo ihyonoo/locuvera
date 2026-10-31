@@ -566,6 +566,7 @@ def forgot_password(body: ForgotPasswordRequest):
             purpose="password_reset",
             ttl_sec=PASSWORD_RESET_TTL_SEC,
             user_id=row[0],
+            payload={"email": email},
         )
         link = f"{APP_PUBLIC_URL}/reset-password?token={urllib.parse.quote(raw_token)}"
         send_reset_email(email, link)
@@ -581,18 +582,20 @@ def reset_password(body: ResetPasswordRequest):
             if not consumed or not consumed.get("user_id"):
                 raise HTTPException(400, "유효하지 않거나 만료된 재설정 링크입니다.")
             password_hash = pwd.hash(password)
+            # 링크를 보낸 주소의 소유는 확인된 것이다(가입 승인 메일 포함).
+            # 그 뒤 이메일을 바꿨다면 새 주소는 인증하지 않는다.
+            sent_to = (consumed.get("payload") or {}).get("email")
             # token_version 을 증가시켜 기존에 발급된 모든 세션 토큰을 무효화한다.
-            # 메일 링크로 들어왔으므로 메일 소유도 확인된 것으로 본다(가입 승인 메일 포함).
             cur.execute(
                 """
                 UPDATE users
                 SET password_hash = %s,
-                    email_verified = TRUE,
+                    email_verified = email_verified OR COALESCE(email = %s, FALSE),
                     token_version = token_version + 1,
                     updated_at = NOW()
                 WHERE user_id = %s
                 """,
-                (password_hash, consumed["user_id"]),
+                (password_hash, sent_to, consumed["user_id"]),
             )
     except HTTPException:
         raise
@@ -1098,6 +1101,14 @@ def approve_signup_request(
                 (employee_no, display_name, role, department, position, email),
             )
             user_id = cur.fetchone()[0]
+            # 같은 트랜잭션에 저장해, 토큰을 못 남기면 계정 생성과 요청 삭제도 함께 되돌린다.
+            raw_token = create_action_token(
+                purpose="password_reset",
+                ttl_sec=ACCOUNT_SETUP_TTL_SEC,
+                user_id=user_id,
+                payload={"email": email},
+                cursor=cur,
+            )
     except HTTPException:
         raise
     except psycopg.errors.UniqueViolation:
@@ -1106,8 +1117,6 @@ def approve_signup_request(
     except Exception:
         raise HTTPException(500, "가입 승인 처리 중 데이터베이스 오류가 발생했습니다.")
 
-    # 토큰은 별도 연결로 저장되어 커밋된 계정을 참조해야 하므로 커밋 뒤에 발급한다.
-    raw_token = create_action_token(purpose="password_reset", ttl_sec=ACCOUNT_SETUP_TTL_SEC, user_id=user_id)
     link = f"{APP_PUBLIC_URL}/reset-password?token={urllib.parse.quote(raw_token)}"
     send_account_setup_email(email, employee_no, role, link)
     return {"ok": True, "user": {"user_id": user_id, "username": employee_no, "role": role}}

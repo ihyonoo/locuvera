@@ -288,6 +288,48 @@ class TestApproveSignupRequest:
         assert response.status_code == 403
         assert _count(db_conn, "SELECT count(*) FROM signup_requests") == 1
 
+    def test_admin_approved_account_logs_in_with_admin_role(self, client, admin_headers, sent_setup_emails):
+        _request(client)
+        _approve(client, admin_headers, _only_request_id(client, admin_headers), role="admin")
+        token = _token_from_link(sent_setup_emails[0]["link"])
+        client.post("/auth/reset-password", json={"token": token, "password": "Str0ng!Passw0rd"})
+
+        login = client.post(
+            "/auth/login", json={"username": "20261031", "password": "Str0ng!Passw0rd", "role": "admin"}
+        )
+
+        assert login.status_code == 200
+        assert login.json()["user"]["role"] == "admin"
+
+    def test_rejects_staff_and_keeps_request(self, client, db_conn, seed_user, sent_setup_emails):
+        _request(client)
+        request_id = _count(db_conn, "SELECT request_id FROM signup_requests")
+        _user_id, staff_headers = seed_user(username="nurse", role="staff")
+
+        response = _approve(client, staff_headers, request_id)
+
+        assert response.status_code == 403
+        assert _count(db_conn, "SELECT count(*) FROM signup_requests") == 1
+
+    # 토큰 저장이 실패하면 계정만 남고 요청은 사라진 채 메일도 못 가는 상태가 되면 안 된다.
+    def test_rolls_back_when_setup_token_cannot_be_stored(
+        self, client, db_conn, admin_headers, sent_setup_emails, monkeypatch
+    ):
+        _request(client)
+        request_id = _only_request_id(client, admin_headers)
+
+        def fail_to_store(**_kwargs):
+            raise RuntimeError("token store unavailable")
+
+        monkeypatch.setattr("backend.server.create_action_token", fail_to_store)
+
+        response = _approve(client, admin_headers, request_id)
+
+        assert response.status_code == 500
+        assert _count(db_conn, "SELECT count(*) FROM signup_requests") == 1
+        assert _count(db_conn, "SELECT count(*) FROM users WHERE username = '20261031'") == 0
+        assert sent_setup_emails == []
+
 
 class TestRejectSignupRequest:
     def test_deletes_request_and_allows_new_request(self, client, db_conn, admin_headers):
@@ -317,6 +359,16 @@ class TestRejectSignupRequest:
         assert response.status_code == 403
         assert _count(db_conn, "SELECT count(*) FROM signup_requests") == 1
 
+    def test_rejects_staff(self, client, db_conn, seed_user):
+        _request(client)
+        request_id = _count(db_conn, "SELECT request_id FROM signup_requests")
+        _user_id, staff_headers = seed_user(username="nurse", role="staff")
+
+        response = client.delete(f"/admin/signup-requests/{request_id}", headers=staff_headers)
+
+        assert response.status_code == 403
+        assert _count(db_conn, "SELECT count(*) FROM signup_requests") == 1
+
 
 class TestPasswordReset:
     def test_reset_marks_email_verified(self, client, db_conn, seed_user, monkeypatch):
@@ -339,3 +391,24 @@ class TestPasswordReset:
         client.post("/auth/forgot-password", json={"email": "forgetful@example.com"})
 
         assert _token_lifetime_sec(db_conn) == pytest.approx(3600, abs=60)
+
+    # 링크는 보낸 주소의 소유만 증명한다 — 그 뒤 바꾼 주소까지 인증된 것으로 보면 안 된다.
+    def test_reset_after_email_change_does_not_verify_the_new_email(self, client, db_conn, seed_user, monkeypatch):
+        sent = []
+        monkeypatch.setattr("backend.server.send_reset_email", lambda to, link: sent.append(link))
+        monkeypatch.setattr("backend.server._send_verification_email_for", lambda *a, **k: None)
+        _user_id, headers = seed_user(username="mover", email="old@example.com", password="Str0ng!Passw0rd")
+        client.post("/auth/forgot-password", json={"email": "old@example.com"})
+        changed = client.post(
+            "/auth/change-email",
+            json={"current_password": "Str0ng!Passw0rd", "new_email": "notmine@example.com"},
+            headers=headers,
+        )
+
+        response = client.post(
+            "/auth/reset-password", json={"token": _token_from_link(sent[0]), "password": "N3w!Passw0rd"}
+        )
+
+        assert changed.status_code == 200
+        assert response.status_code == 200
+        assert _count(db_conn, "SELECT email_verified::int FROM users WHERE username = 'mover'") == 0

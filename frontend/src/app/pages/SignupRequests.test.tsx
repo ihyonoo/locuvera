@@ -123,7 +123,8 @@ describe('SignupRequests', () => {
     fireEvent.click(within(rowFor('20261031')).getByRole('button', { name: '승인' }));
 
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(/본인 것인지 확인/)).toBeInTheDocument();
+    // 남의 사번에 자기 이메일을 넣은 요청을 막으려면 셋이 한 사람 것인지 봐야 한다.
+    expect(within(dialog).getByText(/사번·이름·이메일이 같은 직원의 것인지 확인/)).toBeInTheDocument();
     expect(within(dialog).getByRole('radio', { name: '의료진' })).toHaveAttribute('aria-checked', 'true');
     fireEvent.change(within(dialog).getByLabelText('부서'), { target: { value: '내과' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '승인하기' }));
@@ -167,6 +168,20 @@ describe('SignupRequests', () => {
     expect(await screen.findByText('같은 사번이나 이메일의 계정이 이미 있습니다.')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('20261031')).toBeInTheDocument();
+  });
+
+  // 응답 전에 닫으면 결과(오류 문구)가 사라지고, 늦게 온 응답이 다른 요청의 대화상자를 닫는다.
+  it('cannot be closed while the approval is being saved', async () => {
+    mockApi(() => new Promise(() => {}));
+    renderPage();
+    await screen.findByText('20261031');
+    fireEvent.click(within(rowFor('20261031')).getByRole('button', { name: '승인' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: '승인하기' }));
+
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '취소' })).toBeDisabled());
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('rejects only after confirming, then drops the row', async () => {

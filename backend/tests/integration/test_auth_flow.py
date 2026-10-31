@@ -1,17 +1,9 @@
-"""/auth/login과 Google 로그인 통합 테스트.
-
-테스트 중 진짜 메일이 나가지 않도록 매 테스트에서 인증 메일 발송 함수를 무력화한다.
-"""
+"""/auth/login과 Google 로그인 통합 테스트."""
 
 import pytest
 
 from backend import google_oauth
 from backend.auth_tokens import create_action_token
-
-
-@pytest.fixture(autouse=True)
-def _no_real_email(monkeypatch):
-    monkeypatch.setattr("backend.server._send_verification_email_for", lambda *a, **k: None)
 
 
 class TestLogin:
