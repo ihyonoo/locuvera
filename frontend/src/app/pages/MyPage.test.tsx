@@ -27,11 +27,26 @@ describe('MyPage header', () => {
     sessionStorage.clear();
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, user: { user_id: 1, username: 'u', display_name: 'u', role: 'staff' } }),
-      }),
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () =>
+            url.includes('/usage/')
+              ? { ok: true, items: [] }
+              : {
+                  ok: true,
+                  user: {
+                    user_id: 1,
+                    username: 'nurse07',
+                    display_name: '오태윤',
+                    role: 'staff',
+                    department: '간호부',
+                    position: '간호사',
+                  },
+                },
+        }),
+      ),
     );
   });
 
@@ -40,28 +55,94 @@ describe('MyPage header', () => {
     vi.restoreAllMocks();
   });
 
-  it('prints no page title above the content for staff', () => {
+  it('heads the page with the name, department and position', async () => {
     storeSession('staff');
     renderMyPage();
-    // 상단 네비에 이미 '마이페이지' 탭이 있어 같은 제목을 본문 위에 또 찍지 않는다.
-    expect(document.querySelector('.page-header__title')).toBeNull();
-    expect(screen.getByRole('button', { name: '마이페이지' })).toBeInTheDocument();
+
+    expect(await screen.findByRole('heading', { level: 1, name: '오태윤' })).toBeInTheDocument();
+    expect(screen.getByText('간호부 · 간호사')).toBeInTheDocument();
+    expect(screen.getByText('nurse07')).toBeInTheDocument();
   });
 
-  it('prints no page title above the content for admins either', () => {
+  it('uses the staff menu for staff', () => {
+    storeSession('staff');
+    renderMyPage();
+    const nav = screen.getByRole('navigation', { name: '메뉴' });
+    expect(within(nav).getByRole('button', { name: '장비 검색' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: '마이페이지' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  // 메뉴는 세션의 권한으로 바로 정한다(/auth/me 응답을 기다리지 않는다)
+  it('uses the admin menu for admins', () => {
     storeSession('admin');
     renderMyPage();
-    expect(document.querySelector('.page-header__title')).toBeNull();
+    const nav = screen.getByRole('navigation', { name: '메뉴' });
+    expect(within(nav).getByRole('button', { name: '가입 승인' })).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: '장비 검색' })).not.toBeInTheDocument();
   });
 
-  // 다른 관리 화면(NFC 매핑·장비 검색)과 같은 1360px 본문 폭을 쓴다. 권한에 따라 달라지지 않는다.
-  it.each(['staff', 'admin'] as const)('gives the %s content the same wide body as other pages', (role) => {
-    storeSession(role);
+  // 화면 테마는 메뉴바 아이콘으로 옮겼다
+  it('leaves the screen theme to the menu bar', async () => {
+    storeSession('staff');
+    renderMyPage();
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('radiogroup', { name: '화면 테마' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다크 모드로 바꾸기' })).toBeInTheDocument();
+  });
+});
+
+describe('MyPage usage history', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  function mockHistory(items: unknown[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () =>
+            url.includes('/usage/')
+              ? { ok: true, items }
+              : { ok: true, user: { user_id: 1, username: 'u', display_name: 'u', role: 'staff' } },
+        }),
+      ),
+    );
+  }
+
+  it('lists each usage record with where and when it was borrowed and returned', async () => {
+    storeSession('staff');
+    mockHistory([
+      {
+        usage_id: 3,
+        usage_status: 'returned',
+        equipment: { name: '제세동기-001', type: '제세동기' },
+        checkout: { location: '응급실', at: 1792000000 },
+        return: { location: '3층 병동', at: 1792003600 },
+        movement_path: [
+          { location: '응급실', at: 1792000000 },
+          { location: '3층 병동', at: 1792003600 },
+        ],
+      },
+    ]);
     renderMyPage();
 
-    expect(document.querySelector('.max-w-\\[1360px\\]')).not.toBeNull();
-    expect(document.querySelector('.max-w-3xl')).toBeNull();
-    expect(document.querySelector('.app-shell__container--wide')).not.toBeNull();
+    const record = (await screen.findByText('제세동기-001')).closest('li') as HTMLElement;
+    expect(within(record).getByText('반납됨')).toBeInTheDocument();
+    expect(within(record).getByText(/응급실 → 3층 병동/)).toBeInTheDocument();
+    expect(screen.getByText('1건')).toBeInTheDocument();
+  });
+
+  it('points to the equipment search when there is no history yet', async () => {
+    storeSession('staff');
+    mockHistory([]);
+    renderMyPage();
+
+    expect(await screen.findByText('아직 대여하거나 반납한 장비가 없습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '장비 찾기' })).toBeInTheDocument();
   });
 });
 
@@ -99,11 +180,11 @@ describe('MyPage verification email', () => {
     );
     renderMyPage();
 
-    const emailPanel = (await screen.findByText('이메일 변경', { selector: '.panel-title' })).closest(
-      'section',
+    const emailRow = (await screen.findByText('이메일', { selector: '.staff-setting__label' })).closest(
+      '.staff-setting',
     ) as HTMLElement;
-    fireEvent.click(within(emailPanel).getByRole('button', { name: '변경' }));
-    fireEvent.click(await screen.findByRole('button', { name: '인증 메일 재발송' }));
+    fireEvent.click(within(emailRow).getByRole('button', { name: '변경' }));
+    fireEvent.click(await screen.findByRole('button', { name: '인증 메일 다시 보내기' }));
 
     expect(await screen.findByText('인증 메일 재발송에 실패했습니다.')).toBeInTheDocument();
   });
@@ -133,16 +214,16 @@ describe('MyPage account actions for demo accounts', () => {
     );
   }
 
-  // 패널 제목으로 섹션을 특정한다 — '변경' 버튼이 비밀번호·이메일 두 곳에 있어서다.
-  function panel(title: string) {
-    const heading = screen.getByText(title, { selector: '.panel-title' });
-    return within(heading.closest('section') as HTMLElement);
+  // 설정 줄 이름으로 줄을 특정한다 — '변경' 버튼이 비밀번호·이메일 두 곳에 있어서다.
+  function row(label: string) {
+    const name = screen.getByText(label, { selector: '.staff-setting__label' });
+    return within(name.closest('.staff-setting') as HTMLElement);
   }
 
   async function renderDemoPage() {
     storeSession('staff');
     renderMyPage();
-    await screen.findByText('내 정보');
+    await screen.findByText('계정');
   }
 
   beforeEach(() => {
@@ -159,15 +240,15 @@ describe('MyPage account actions for demo accounts', () => {
   it('hides Google linking while Google login is off (default)', async () => {
     await renderDemoPage();
 
-    expect(screen.queryByText('Google 연동', { selector: '.panel-title' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Google 연동', { selector: 'dt' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Google/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Google 연동', { selector: '.staff-setting__label' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Google', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /연동/ })).not.toBeInTheDocument();
   });
 
   it('warns instead of opening the password form', async () => {
     await renderDemoPage();
 
-    fireEvent.click(panel('비밀번호 변경').getByRole('button', { name: '변경' }));
+    fireEvent.click(row('비밀번호').getByRole('button', { name: '변경' }));
 
     expect(await screen.findByText(DEMO_NOTICE)).toBeInTheDocument();
     expect(screen.queryByLabelText('현재 비밀번호')).not.toBeInTheDocument();
@@ -176,7 +257,7 @@ describe('MyPage account actions for demo accounts', () => {
   it('warns instead of opening the email form', async () => {
     await renderDemoPage();
 
-    fireEvent.click(panel('이메일 변경').getByRole('button', { name: '변경' }));
+    fireEvent.click(row('이메일').getByRole('button', { name: '변경' }));
 
     expect(await screen.findByText(DEMO_NOTICE)).toBeInTheDocument();
     expect(screen.queryByLabelText('새 이메일')).not.toBeInTheDocument();
@@ -187,7 +268,7 @@ describe('MyPage account actions for demo accounts', () => {
     await renderDemoPage();
     const callsBefore = vi.mocked(fetch).mock.calls.length;
 
-    fireEvent.click(screen.getByRole('button', { name: 'Google 연동 해제' }));
+    fireEvent.click(row('Google 연동').getByRole('button', { name: '연동 해제' }));
 
     expect(await screen.findByText(DEMO_NOTICE)).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.length).toBe(callsBefore);
@@ -196,69 +277,25 @@ describe('MyPage account actions for demo accounts', () => {
   it('warns instead of opening the withdraw form', async () => {
     await renderDemoPage();
 
-    fireEvent.click(panel('회원 탈퇴').getByRole('button', { name: '회원 탈퇴' }));
+    fireEvent.click(screen.getByRole('button', { name: '회원 탈퇴' }));
 
     expect(await screen.findByText(DEMO_NOTICE)).toBeInTheDocument();
     expect(screen.queryByLabelText('현재 비밀번호 확인')).not.toBeInTheDocument();
+  });
+
+  it('tells demo accounts up front that settings are locked', async () => {
+    await renderDemoPage();
+
+    expect(screen.getByText('데모 체험 계정은 계정 설정을 바꿀 수 없습니다.')).toBeInTheDocument();
   });
 
   it('still opens the password form for a normal account', async () => {
     mockMe({ is_demo: false });
     await renderDemoPage();
 
-    fireEvent.click(panel('비밀번호 변경').getByRole('button', { name: '변경' }));
+    fireEvent.click(row('비밀번호').getByRole('button', { name: '변경' }));
 
     expect(await screen.findByLabelText('현재 비밀번호')).toBeInTheDocument();
     expect(screen.queryByText(DEMO_NOTICE)).not.toBeInTheDocument();
-  });
-});
-
-describe('MyPage screen theme', () => {
-  beforeEach(() => {
-    sessionStorage.clear();
-    localStorage.clear();
-    document.documentElement.classList.remove('dark');
-    storeSession('staff');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, user: { user_id: 1, username: 'u', display_name: 'u', role: 'staff' } }),
-      }),
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-    document.documentElement.classList.remove('dark');
-  });
-
-  it('starts on light when nothing is stored', async () => {
-    renderMyPage();
-    const group = await screen.findByRole('radiogroup', { name: '화면 테마' });
-    expect(within(group).getByRole('radio', { name: '라이트' })).toBeChecked();
-    expect(within(group).getByRole('radio', { name: '다크' })).not.toBeChecked();
-  });
-
-  it('switches this device to dark right away', async () => {
-    renderMyPage();
-    const group = await screen.findByRole('radiogroup', { name: '화면 테마' });
-    fireEvent.click(within(group).getByRole('radio', { name: '다크' }));
-    expect(localStorage.getItem('locuvera-theme')).toBe('dark');
-    expect(document.documentElement).toHaveClass('dark');
-    expect(within(group).getByRole('radio', { name: '다크' })).toBeChecked();
-  });
-
-  it('switches back to light', async () => {
-    localStorage.setItem('locuvera-theme', 'dark');
-    document.documentElement.classList.add('dark');
-    renderMyPage();
-    const group = await screen.findByRole('radiogroup', { name: '화면 테마' });
-    expect(within(group).getByRole('radio', { name: '다크' })).toBeChecked();
-    fireEvent.click(within(group).getByRole('radio', { name: '라이트' }));
-    expect(localStorage.getItem('locuvera-theme')).toBe('light');
-    expect(document.documentElement).not.toHaveClass('dark');
   });
 });

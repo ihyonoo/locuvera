@@ -79,6 +79,19 @@ describe('FloorMapView', () => {
     expect(screen.getByTestId('floor-map-equipment-dot-EQ-BUSY')).toHaveClass('map-marker-err');
   });
 
+  it('draws equipment dots as glossy balls (no white rim)', () => {
+    render(
+      <FloorMapView
+        floor={1}
+        pins={[{ reader_id: 'M101', label: '병동 A' }]}
+        equipment={[{ tag_id: 'EQ-FREE', reader_id: 'M101', label: '수액펌프 1호', assetStatus: 'available' }]}
+        zoneBounds={SQUARE_BOUNDS}
+      />,
+    );
+
+    expect(screen.getByTestId('floor-map-equipment-dot-EQ-FREE')).toHaveClass('map-marker-dot');
+  });
+
   it('marks inactive equipment with its own color', () => {
     render(
       <FloorMapView

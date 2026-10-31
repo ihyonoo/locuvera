@@ -190,3 +190,40 @@ describe('auth pages scrollbar', () => {
     expect(block(/\nhtml:has\(\.auth-split\)::-webkit-scrollbar\s*\{/)).toMatch(/display:\s*none/);
   });
 });
+
+// 의료진 화면(장비 검색·마이페이지) — .staff(.staff-tokens)에 라이트 토큰, html.dark 쪽에 다크 토큰
+describe('staff screen tokens', () => {
+  const staffLight = tokens(block(/\n\.staff,\s*\.staff-tokens\s*\{/));
+  const staffDark = { ...staffLight, ...tokens(block(/html\.dark \.staff,\s*html\.dark \.staff-tokens\s*\{/)) };
+
+  const pairs: [string, string, number][] = [
+    ['--staff-text', '--staff-surface', 4.5],
+    ['--staff-muted', '--staff-surface', 4.5],
+    ['--staff-muted', '--staff-canvas', 4.5],
+    ['--staff-muted', '--staff-fill', 4.5],
+    ['--staff-teal-text', '--staff-surface', 4.5],
+    ['--staff-teal-text', '--staff-fill', 4.5],
+    ['--staff-danger-text', '--staff-surface', 4.5],
+    ['--staff-alert-text', '--staff-fill', 4.5],
+  ];
+
+  it.each(pairs)('light %s on %s stays readable (≥ %s:1)', (fg, bg, min) => {
+    expect(ratio(parseColor(staffLight[fg]), parseColor(staffLight[bg]))).toBeGreaterThanOrEqual(min);
+  });
+
+  it.each(pairs)('dark %s on %s stays readable (≥ %s:1)', (fg, bg, min) => {
+    expect(ratio(parseColor(staffDark[fg]), parseColor(staffDark[bg]))).toBeGreaterThanOrEqual(min);
+  });
+
+  // 확정·탈퇴 단추는 두 테마 모두 흰 글자
+  it.each(['--staff-confirm', '--staff-danger'])('keeps white text readable on %s in both themes', (token) => {
+    const white = parseColor('#ffffff');
+    expect(ratio(white, parseColor(staffLight[token]))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, parseColor(staffDark[token]))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('separates the panels from the page background in both themes', () => {
+    expect(staffLight['--staff-surface']).not.toBe(staffLight['--staff-canvas']);
+    expect(staffDark['--staff-surface']).not.toBe(staffDark['--staff-canvas']);
+  });
+});

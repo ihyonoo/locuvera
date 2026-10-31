@@ -144,7 +144,7 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     renderPage();
 
     await sidebar().findByText('모의 수액펌프');
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
 
     await waitFor(() => expect(sidebar().queryByText('모의 수액펌프')).not.toBeInTheDocument());
     expect(liveRequests().at(-1)).toContain('hide_simulated=true');
@@ -165,7 +165,7 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     );
     renderPage();
     await waitFor(() => expect(liveRequests()).toHaveLength(1));
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
     await sidebar().findByText('실물 제세동기');
     await act(async () => {
       releaseOld({ ok: true, status: 200, json: async () => livePayloadFor('http://localhost/rtls/live') });
@@ -196,7 +196,7 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     renderPage();
 
     await sidebar().findByText('모의 수액펌프');
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
 
     const spotlight = await screen.findByTestId('floor-map-spotlight');
     expect(within(spotlight).getByTestId('floor-map-spotlight-hole-M502')).toBeInTheDocument();
@@ -209,7 +209,7 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     await sidebar().findByText('모의 수액펌프');
     expect(screen.getByRole('img', { name: '1층 평면도' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
 
     // 실물 리더는 5층에만 있으므로, 1층에 머물러 빈 지도를 보여주지 않고 따라 올라간다.
     await waitFor(() => expect(screen.getByRole('img', { name: '5층 평면도' })).toBeInTheDocument());
@@ -219,12 +219,12 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     renderPage();
 
     await sidebar().findByText('모의 수액펌프');
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
     await waitFor(() => expect(screen.getByRole('img', { name: '5층 평면도' })).toBeInTheDocument());
 
     // 이미 실물이 있는 층이면 토글을 다시 켜도 층이 바뀌지 않는다.
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '시뮬레이션 숨김' }));
     await waitFor(() => expect(screen.getByRole('img', { name: '5층 평면도' })).toBeInTheDocument());
   });
 
@@ -245,7 +245,7 @@ describe('EquipmentSearch simulated equipment toggle', () => {
     renderPage();
 
     await sidebar().findByText('모의 수액펌프');
-    const toggle = screen.getByRole('checkbox', { name: '시뮬레이션 장비 숨기기' });
+    const toggle = screen.getByRole('checkbox', { name: '시뮬레이션 숨김' });
     fireEvent.click(toggle);
     await waitFor(() => expect(sidebar().queryByText('모의 수액펌프')).not.toBeInTheDocument());
 

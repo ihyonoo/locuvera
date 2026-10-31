@@ -223,9 +223,9 @@ describe('EquipmentSearch sidebar filters', () => {
     await screen.findByTestId('floor-map-container');
 
     const toggles = screen.getByTestId('equipment-filter-toggles');
-    expect(toggles.className).toContain('flex');
-    expect(within(toggles).getByLabelText('사용 가능 장비만 보기')).toBeInTheDocument();
-    expect(within(toggles).getByLabelText('시뮬레이션 장비 숨기기')).toBeInTheDocument();
+    expect(toggles).toHaveClass('staff-switches');
+    expect(within(toggles).getByLabelText('사용 가능만')).toBeInTheDocument();
+    expect(within(toggles).getByLabelText('시뮬레이션 숨김')).toBeInTheDocument();
   });
 
   it('reports the full count when no filter is active', async () => {
@@ -244,7 +244,7 @@ describe('EquipmentSearch sidebar filters', () => {
     fireEvent.change(within(sidebar()).getByPlaceholderText('태그 ID, 장비명, 위치 검색'), {
       target: { value: '수액' },
     });
-    fireEvent.click(within(sidebar()).getByLabelText('사용 가능 장비만 보기'));
+    fireEvent.click(within(sidebar()).getByLabelText('사용 가능만'));
 
     const summary = screen.getByTestId('equipment-result-summary');
     await waitFor(() => expect(summary).toHaveTextContent('검색 결과 1건'));
@@ -261,6 +261,33 @@ describe('EquipmentSearch sidebar filters', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('equipment-result-summary')).toHaveTextContent('검색 결과 0건'));
-    expect(within(sidebar()).getByText('표시할 실시간 태그가 없습니다.')).toBeInTheDocument();
+    expect(within(sidebar()).getByText('조건에 맞는 장비가 없습니다.')).toBeInTheDocument();
+  });
+});
+
+describe('EquipmentSearch list view zones', () => {
+  beforeEach(stubLiveFetch);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('labels the floor buttons 1F~5F while keeping 층 names for screen readers', async () => {
+    await openListView();
+
+    expect(within(floorTabs()).getByRole('button', { name: '1층' })).toHaveTextContent('1F');
+    expect(within(floorTabs()).getByRole('button', { name: '5층' })).toHaveTextContent('5F');
+  });
+
+  it('says a zone has no equipment right now when nothing is there', async () => {
+    await openListView();
+
+    fireEvent.change(within(sidebar()).getByPlaceholderText('태그 ID, 장비명, 위치 검색'), {
+      target: { value: '제세동기' },
+    });
+
+    const zone = screen.getByRole('heading', { name: '1층 병동 A' }).closest('section') as HTMLElement;
+    await waitFor(() => expect(within(zone).getByText('현재 장비 없음')).toBeInTheDocument());
   });
 });

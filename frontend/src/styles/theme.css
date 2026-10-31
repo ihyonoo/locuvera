@@ -48,9 +48,7 @@
   --app-panel-border: #94a3b8;
   --app-panel-highlight: transparent;
   /* 순백 캔버스 위에서 패널이 얹혀 보이도록 */
-  --app-panel-shadow:
-    0 2px 4px rgba(15, 23, 42, 0.08),
-    0 14px 32px -12px rgba(15, 23, 42, 0.22);
+  --app-panel-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 14px 32px -12px rgba(15, 23, 42, 0.22);
   --app-soft-panel-background: #f6f9fb;
   --app-soft-panel-border: #94a3b8;
   --app-soft-panel-highlight: none;
@@ -115,9 +113,7 @@
     --app-nav-border: #33353a;
     --app-panel-background: #1a1b1e;
     --app-panel-border: #33353a;
-    --app-panel-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.3),
-      0 14px 32px -12px rgba(0, 0, 0, 0.55);
+    --app-panel-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 32px -12px rgba(0, 0, 0, 0.55);
     --app-soft-panel-background: #232428;
     --app-soft-panel-border: #33353a;
     --app-muted-panel-background: #16171a;
@@ -208,21 +204,21 @@
 
   /* 네이티브 날짜 입력창(연/월/일 필드·달력 아이콘)은 브라우저가 내부 폭을 자체 계산해서
      좁은 화면에서 부모 박스를 살짝 넘어서는 경우가 있어, 강제로 폭 안에 맞춘다. */
-  input[type="date"],
-  input[type="time"],
-  input[type="datetime-local"] {
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'] {
     min-width: 0;
   }
 
-  input[type="date"]::-webkit-datetime-edit,
-  input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  input[type='date']::-webkit-datetime-edit,
+  input[type='date']::-webkit-datetime-edit-fields-wrapper {
     min-width: 0;
     overflow: hidden;
   }
 
   /* 체크박스·라디오는 커스텀 컴포넌트 없이 네이티브를 쓰므로, 강조색만 앱 팔레트로 맞춘다. */
-  input[type="checkbox"],
-  input[type="radio"] {
+  input[type='checkbox'],
+  input[type='radio'] {
     accent-color: var(--primary);
   }
 
@@ -240,13 +236,7 @@
     min-height: 100vh;
     /* 개별 요소가 미처 감싸지 못한 넘침이 있어도 페이지 전체가 가로로 밀리지 않게 하는 안전장치 */
     overflow-x: hidden;
-    font-family:
-      "Inter",
-      "Sofia Sans",
-      "Noto Sans KR",
-      "Helvetica Neue",
-      Arial,
-      sans-serif;
+    font-family: 'Inter', 'Sofia Sans', 'Noto Sans KR', 'Helvetica Neue', Arial, sans-serif;
     letter-spacing: -0.01em;
     background: var(--app-body-background);
     color: var(--foreground);
@@ -558,38 +548,74 @@
     color: var(--muted-foreground);
   }
 
-  .solid-ok { background: var(--ok-solid); }
-  .solid-warn { background: var(--warn-solid); }
-  .solid-err { background: var(--err-solid); }
-  .solid-neutral { background: var(--muted-foreground); }
+  .solid-ok {
+    background: var(--ok-solid);
+  }
+  .solid-warn {
+    background: var(--warn-solid);
+  }
+  .solid-err {
+    background: var(--err-solid);
+  }
+  .solid-neutral {
+    background: var(--muted-foreground);
+  }
 
-  .dot-ok { background: var(--ok-solid); }
-  .dot-warn { background: var(--warn-solid); }
-  .dot-err { background: var(--err-solid); }
+  .dot-ok {
+    background: var(--ok-solid);
+  }
+  .dot-warn {
+    background: var(--warn-solid);
+  }
+  .dot-err {
+    background: var(--err-solid);
+  }
 
   /* 지도 위 장비 점 전용 — 3D 구슬과 같은 색(lib/mapPins.ts PIN_COLORS).
-     흰 테두리와 채움의 대비가 3:1 이상이라 어느 평면도·테마 위에서도 점이 구분된다. */
-  .map-marker-ok { background: #16a34a; }
-  .map-marker-err { background: #dc2626; }
-  .map-marker-neutral { background: #475569; }
-
-  .map-marker-ok,
-  .map-marker-err,
+     채움이 흰 평면도와 3:1 이상 대비라 흰 테두리 없이도 점이 구분된다. */
+  .map-marker-ok {
+    background: #16a34a;
+  }
+  .map-marker-err {
+    background: #dc2626;
+  }
   .map-marker-neutral {
-    box-shadow: 0 0 0 1.5px #fff;
+    background: #475569;
   }
 
-  /* 선택된 장비 마커 — 흰 테두리와 글로우로 주변 점들과 확실히 구분한다(채움 색은 그대로). */
+  /* 2D 점 — 흰 테두리 대신 왼쪽 위 반사광과 옅은 그림자(3D 광택 구슬과 같은 느낌) */
+  .map-marker-dot {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  }
+
+  .map-marker-dot.map-marker-ok {
+    background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.5) 0, #4ade80 30%, #16a34a 55%, #12803b 100%);
+  }
+
+  .map-marker-dot.map-marker-err {
+    background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.5) 0, #f87171 30%, #dc2626 55%, #b01e1e 100%);
+  }
+
+  .map-marker-dot.map-marker-neutral {
+    background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.5) 0, #94a3b8 30%, #475569 55%, #334155 100%);
+  }
+
+  /* 선택된 장비 마커 — 흰 테두리 대신 옅은 어두운 고리(채움 색은 그대로) */
   .map-marker-spotlight {
     box-shadow:
-      0 0 0 3px #fff,
-      0 0 0 5px rgb(15 23 42 / 0.35),
-      0 0 16px 6px rgb(255 255 255 / 0.65);
+      0 1px 3px rgb(0 0 0 / 0.35),
+      0 0 0 4px rgb(15 23 42 / 0.16);
   }
 
-  .text-ok { color: var(--ok-fg); }
-  .text-warn { color: var(--warn-solid); }
-  .text-err { color: var(--err-solid); }
+  .text-ok {
+    color: var(--ok-fg);
+  }
+  .text-warn {
+    color: var(--warn-solid);
+  }
+  .text-err {
+    color: var(--err-solid);
+  }
 
   .alert {
     border-radius: var(--radius-md);
@@ -642,7 +668,7 @@
   }
 
   .skeleton::after {
-    content: "";
+    content: '';
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
@@ -686,7 +712,7 @@
       padding-top: 1.5rem;
     }
 
-    /* AdminNav/StaffNav가 이 폭에서는 햄버거 아이콘 하나로 접혀 있어, 로고 옆에 나란히
+    /* AdminNav가 이 폭에서는 햄버거 아이콘 하나로 접혀 있어, 로고 옆에 나란히
        한 줄로 들어간다 — width:100%로 액션 영역을 강제로 새 줄로 밀던 예전 규칙(탭 6개가
        나열되던 시절 것)은 이제 아이콘 하나를 불필요하게 줄바꿈시키기만 해서 제거한다. */
     .brand-logo {
@@ -910,9 +936,7 @@ html:has(.auth-split)::-webkit-scrollbar {
   width: 0.55rem;
   height: 100vh;
   /* 회색 천 — 왼쪽 가장자리만 살짝 밝게 */
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px),
-    #6b6b6b;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px), #6b6b6b;
   box-shadow: 3px 0 8px var(--auth-shadow-dark);
   pointer-events: none;
 }
@@ -1015,7 +1039,14 @@ html:has(.auth-split)::-webkit-scrollbar {
   height: 2rem;
   border-radius: 0.4rem;
   background:
-    linear-gradient(90deg, transparent 32%, rgba(95, 95, 95, 0.35) 32% 35%, transparent 35% 65%, rgba(95, 95, 95, 0.35) 65% 68%, transparent 68%),
+    linear-gradient(
+      90deg,
+      transparent 32%,
+      rgba(95, 95, 95, 0.35) 32% 35%,
+      transparent 35% 65%,
+      rgba(95, 95, 95, 0.35) 65% 68%,
+      transparent 68%
+    ),
     linear-gradient(180deg, transparent 47%, rgba(95, 95, 95, 0.35) 47% 53%, transparent 53%),
     linear-gradient(135deg, #ededed, #bdbdbd);
   box-shadow:
@@ -1236,7 +1267,6 @@ html:has(.auth-split)::-webkit-scrollbar {
   text-indent: 0.14em;
 }
 
-
 /* 제목 아래 발급 정보 한 줄 — 문서번호·검증 시각·상태를 나란히 세운다 */
 .certificate__meta {
   display: flex;
@@ -1267,8 +1297,6 @@ html:has(.auth-split)::-webkit-scrollbar {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-
-
 
 /* 장비명·태그·usage_id를 한 줄에 세로 구분선으로 나눠 놓는다 */
 .certificate-identity {
@@ -1331,7 +1359,6 @@ html:has(.auth-split)::-webkit-scrollbar {
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-
 
 .certificate-section__body {
   padding: 0.85rem 0 0 2rem;
@@ -1481,12 +1508,6 @@ html:has(.auth-split)::-webkit-scrollbar {
   letter-spacing: 0.06em;
 }
 
-
-
-
-
-
-
 .certificate__actions {
   display: flex;
   justify-content: flex-end;
@@ -1621,5 +1642,1379 @@ html:has(.auth-split)::-webkit-scrollbar {
   .certificate__actions,
   .certificate-hash__copy {
     display: none !important;
+  }
+}
+
+/* ── 의료진 화면(장비 검색·마이페이지) ─────────────────────────── */
+/* 로그인 출입증 카드와 같은 가족, 다른 역할: 무채색 회색 + 청록 점 + 둥근 모서리 + 알약 탭만 가져온다 */
+/* 볼록·오목 그림자는 쓰지 않는다 — 면은 명도 차이로, 묶음은 가는 선으로 나눈다 */
+/* 그림자는 실제로 떠 있는 것(드롭다운·메뉴)에만 옅게 */
+/* 대비는 theme.contrast.test.ts가 계산한다 */
+/* .staff-tokens는 화면 밖(포털)에 뜨는 창이 같은 색을 쓰게 토큰만 받는다 */
+.staff,
+.staff-tokens {
+  --staff-canvas: #e6e6e6;
+  --staff-surface: #f5f5f5;
+  --staff-fill: #e9e9e9;
+  --staff-fill-hover: #e2e2e2;
+  /* 고른 칸(알약 탭·층 단추)의 흰 면 */
+  --staff-raise: #ffffff;
+  --staff-tray: #ededed;
+  --staff-track: #d4d4d4;
+  --staff-hover: rgba(0, 0, 0, 0.03);
+  --staff-line: rgba(0, 0, 0, 0.07);
+  --staff-line-strong: rgba(0, 0, 0, 0.12);
+  --staff-text: #333333;
+  --staff-muted: #5e5e5e;
+  --staff-ok: #16a34a;
+  --staff-busy: #dc2626;
+  --staff-warn: #d97706;
+  --staff-teal: #0d9488;
+  --staff-teal-text: #0f766e;
+  --staff-confirm: #0f766e;
+  --staff-confirm-hover: #115e59;
+  --staff-danger: #b91c1c;
+  --staff-danger-hover: #991b1b;
+  --staff-danger-text: #b91c1c;
+  --staff-alert-text: #9a3412;
+  --staff-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.1);
+  /* 안의 공용 부품(Select·Input·지도)이 이 색을 따르게 공용 토큰도 덮어쓴다 */
+  --foreground: var(--staff-text);
+  --muted-foreground: var(--staff-muted);
+  --background: var(--staff-surface);
+  --card: var(--staff-surface);
+  --input-background: var(--staff-fill);
+  --secondary: var(--staff-fill);
+  --border: var(--staff-line);
+  --map3d-stage: transparent;
+}
+
+.staff {
+  min-height: 100vh;
+  background: var(--staff-canvas);
+  color: var(--foreground);
+  /* 한국어는 낱말 중간에서 줄을 바꾸지 않고, 긴 이메일만 필요할 때 끊는다 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 다크 — 기존 다크 토큰 계열(회흑색 바탕). 인쇄는 늘 라이트(screen 안) */
+@media screen {
+  html.dark .staff,
+  html.dark .staff-tokens {
+    --staff-canvas: #111214;
+    --staff-surface: #1a1b1e;
+    --staff-fill: #25272b;
+    --staff-fill-hover: #2c2e33;
+    --staff-raise: #34363c;
+    --staff-tray: #16171a;
+    --staff-track: #3a3c41;
+    --staff-hover: rgba(255, 255, 255, 0.04);
+    --staff-line: rgba(255, 255, 255, 0.08);
+    --staff-line-strong: rgba(255, 255, 255, 0.14);
+    --staff-text: #e7e8ea;
+    --staff-muted: #a1a3a8;
+    --staff-teal: #14b8a6;
+    --staff-teal-text: #2dd4bf;
+    --staff-danger-text: #f87171;
+    --staff-alert-text: #fdba74;
+    --staff-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  html.dark:has(.staff),
+  html.dark:has(.staff) body {
+    background: #111214;
+  }
+}
+
+/* 스크롤바 자리까지 바탕색으로 */
+html:has(.staff),
+html:has(.staff) body {
+  background: #e6e6e6;
+}
+
+.staff button {
+  cursor: pointer;
+}
+
+.staff button:focus-visible,
+.staff-switch input:focus-visible + .staff-switch__track {
+  outline: 2px solid var(--staff-teal);
+  outline-offset: 2px;
+}
+
+.staff-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.staff-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+/* ── 상단 메뉴바: 띠·테두리 없이 바탕 위 글자만, 오른쪽 끝에 모은다(로고는 사이드바) ── */
+.staff-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.75rem;
+  margin: 0 2rem 0 1.5rem;
+  padding: 0.75rem 0;
+  /* 메뉴바 경계는 얇은 선 하나로만 */
+  border-bottom: 1px solid var(--staff-line-strong);
+}
+
+/* 메뉴바 아이콘 단추(화면 테마) */
+.staff-icon-btn {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  margin-right: -0.5rem;
+  border-radius: 50%;
+  color: var(--muted-foreground);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.staff-icon-btn:hover {
+  background: var(--staff-fill);
+  color: var(--foreground);
+}
+
+/* 화면 이동 메뉴와 로그아웃 사이 */
+.staff-menu__rule {
+  width: 1px;
+  height: 0.9rem;
+  background: var(--staff-line-strong);
+}
+
+.staff-menu {
+  display: flex;
+  gap: 1.75rem;
+}
+
+.staff-menu__item {
+  position: relative;
+  display: inline-flex;
+  height: 2.5rem;
+  align-items: center;
+  color: var(--muted-foreground);
+  font-size: 1.1rem;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.staff-menu__item:hover {
+  color: var(--foreground);
+}
+
+.staff-menu__item--on {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+/* 지금 화면 표시 — 글자 아래 짧은 청록 밑줄(메뉴바 선과는 떨어져 있다) */
+.staff-menu__item--on::after {
+  content: '';
+  position: absolute;
+  bottom: 0.2rem;
+  left: 0;
+  width: 1.1rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--staff-teal);
+}
+
+/* ── 알약 스위치: 옅은 회색 트랙, 고른 칸은 흰 면 + 청록 점 ── */
+.staff-seg {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: var(--staff-fill);
+}
+
+.staff-seg__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.25rem;
+  padding: 0 1.15rem;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 0.93rem;
+  font-weight: 600;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.staff-seg__item:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+.staff-seg__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.staff-seg__item--on {
+  background: var(--staff-raise);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.staff-seg__item--on::before {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--staff-teal);
+}
+
+.staff-seg--small .staff-seg__item {
+  height: 1.9rem;
+  padding: 0 0.85rem;
+  font-size: 0.84rem;
+}
+
+.staff-seg--small .staff-seg__item--on::before {
+  display: none;
+}
+
+/* ── 면 ── */
+.staff-panel {
+  border-radius: 1.25rem;
+  background: var(--staff-surface);
+  padding: 1.4rem;
+}
+
+.staff-well {
+  border-top: 1px solid var(--staff-line);
+}
+
+/* ── 검색칸 ── */
+.staff-search {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  height: 2.85rem;
+  padding: 0 0.3rem 0 1rem;
+  border-radius: 999px;
+  background: var(--staff-fill);
+  transition: box-shadow 0.15s ease;
+}
+
+.staff-search:focus-within {
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.45);
+}
+
+.staff-search__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.staff-search input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  outline: none;
+  font-size: 0.96rem;
+  color: var(--foreground);
+}
+
+.staff-search input::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* ── 필터: 기존 Select를 옅은 회색 면으로 ── */
+.staff-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem 0.65rem;
+}
+
+.staff-fields > :first-child {
+  grid-column: 1 / -1;
+}
+
+.staff-fields > div {
+  width: auto;
+}
+
+.staff-fields label {
+  display: block;
+  margin-bottom: 0.3rem;
+  padding-left: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.staff [data-slot='select-trigger'] {
+  width: 100%;
+  height: 2.6rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--staff-fill);
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.staff [data-slot='select-trigger']:hover {
+  background: var(--staff-fill-hover);
+}
+
+.staff [data-slot='select-trigger']:focus-visible {
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.45);
+}
+
+html:has(.staff) [data-slot='select-content'] {
+  border-radius: 0.9rem;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.1);
+}
+
+html:has(.staff) [data-slot='select-item'] {
+  border-radius: 0.55rem;
+}
+
+/* ── 켜고 끄기 ── */
+.staff-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.3rem;
+}
+
+.staff-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.staff-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.staff-switch__track {
+  position: relative;
+  width: 2.2rem;
+  height: 1.3rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--staff-track);
+  transition: background-color 0.15s ease;
+}
+
+.staff-switch__knob {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.staff-switch input:checked + .staff-switch__track {
+  background: var(--staff-teal);
+}
+
+.staff-switch input:checked + .staff-switch__track .staff-switch__knob {
+  transform: translateX(0.9rem);
+}
+
+/* ── 상태 점 ── */
+.staff-led {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--staff-ok);
+}
+
+.staff-led--busy {
+  background: var(--staff-busy);
+}
+
+.staff-led--warn {
+  background: var(--staff-warn);
+}
+
+.staff-led--off {
+  background: #9a9a9a;
+}
+
+/* 실시간 갱신 중임을 알리는 맥박 */
+.staff-led--live {
+  background: var(--staff-teal);
+  animation: staff-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes staff-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(13, 148, 136, 0);
+  }
+}
+
+.staff-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.staff-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.1rem;
+  font-size: 0.84rem;
+  color: var(--muted-foreground);
+}
+
+.staff-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.staff-credit {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+/* ── 목록 행: 가는 선으로만 나누고, 고른 행은 옅은 회색 면 + 청록 이름 ── */
+.staff-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--staff-line);
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.staff-row:last-child {
+  border-bottom: 0;
+}
+
+.staff-row:hover {
+  background: var(--staff-hover);
+}
+
+.staff-row--on,
+.staff-row--on:hover {
+  background: var(--staff-fill);
+}
+
+.staff-row__main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.staff-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.staff-row--on .staff-row__name {
+  color: var(--staff-teal-text);
+}
+
+.staff-row__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.staff-row__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.staff-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+
+.staff-empty--inline {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+/* 오류 — 옅은 회색 면 + 주황 점 */
+.staff-alert {
+  padding: 0.7rem 0.95rem;
+  border-radius: 0.75rem;
+  background: var(--staff-fill);
+  font-size: 0.87rem;
+  color: var(--staff-alert-text);
+}
+
+.staff-alert::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: #c2410c;
+}
+
+/* ── 층 버튼: 동그란 회색 단추, 고른 층은 흰 면 + 청록 숫자 ── */
+.staff-elevator {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.staff-floor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--staff-fill);
+  color: var(--muted-foreground);
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.staff-floor:hover {
+  background: var(--staff-fill-hover);
+  color: var(--foreground);
+}
+
+.staff-floor--on,
+.staff-floor--on:hover {
+  background: var(--staff-raise);
+  color: var(--staff-teal-text);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 0 0 1.5px rgba(13, 148, 136, 0.5);
+}
+
+/* ── 지도 받침: 패널보다 한 단계 어두운 면 ── */
+.staff-tray {
+  min-width: 0;
+  border-radius: 1rem;
+  background: var(--staff-tray);
+}
+
+.staff-map {
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+/* ── 구역 ── */
+.staff-subhead {
+  margin: 1.1rem 0 0.3rem;
+  padding: 0 0.6rem 0.4rem;
+  border-bottom: 1px solid var(--staff-line);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+}
+
+.staff-zone {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.staff-zone:hover {
+  background: var(--staff-hover);
+}
+
+.staff-zone--on,
+.staff-zone--on:hover {
+  background: var(--staff-fill);
+  color: var(--staff-teal-text);
+  font-weight: 600;
+}
+
+.staff-zone__count {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.staff-zone__count--zero {
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+/* 편의시설 — 안내용 글자만(누를 수 없음), 작은 회색 글자로 두 칸씩 */
+.staff-amenities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.1rem 0.5rem;
+}
+
+.staff-amenity {
+  overflow: hidden;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.84rem;
+  color: var(--muted-foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-amenity--wide {
+  grid-column: 1 / -1;
+}
+
+/* ── 목록 보기(구역별 묶음) ── */
+.staff-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem 1.1rem;
+}
+
+/* 구역 안 장비 — 가로 칸으로 나누고, 칸마다 아래 가는 선 */
+.staff-group__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  column-gap: 1.25rem;
+}
+
+.staff-group__items .staff-row:last-child {
+  border-bottom: 1px solid var(--staff-line);
+}
+
+.staff-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--staff-line-strong);
+}
+
+.staff-group__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.staff-group__none {
+  padding: 0.65rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+
+/* ── 틀: 왼쪽에 붙은 사이드바(있을 때) + 메뉴바 + 본문 ── */
+.staff-shell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.staff-shell__body {
+  min-width: 0;
+}
+
+/* 폭 고정(접기·끌어서 조절 없음) — 화면이 좁으면 조금 줄어든다 */
+.staff-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  width: clamp(21rem, 22vw, 26rem);
+  height: 100vh;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.75rem 1.4rem 1.4rem;
+  border-right: 1px solid var(--staff-line);
+  background: var(--staff-surface);
+}
+
+.staff-sidebar > * {
+  flex-shrink: 0;
+}
+
+/* 로고 줄 — 상단 메뉴바와 같은 높이에 맞춘다 */
+.staff-sidebar__brand {
+  display: flex;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+/* 지도 높이는 rem 고정값 — 브라우저 확대·축소에 다른 요소와 함께 커지고 작아진다(화면 높이 vh에 묶지 않음) */
+/* 44rem: 100% 배율 2000×1007 화면에서 가운데 패널이 한 화면에 들어오는 값. 좁은 화면에서는 패널 폭이 먼저 제한한다 */
+.staff-equip {
+  --staff-map-h: 44rem;
+  display: grid;
+  /* 화면이 좁으면 구역 패널을 줄여 지도에 폭을 준다 */
+  /* 지도 패널 최대 폭 = 지도 높이 × 1.6(층 외곽 비율) + 층 버튼(3.5) + 패널 여백(2.8) — 넘는 폭은 패널 밖 양옆 여백으로 */
+  grid-template-columns: minmax(0, calc(var(--staff-map-h) * 1.6 + 6.3rem)) clamp(15rem, 15vw, 17rem);
+  justify-content: center;
+  align-items: start;
+  gap: 1.25rem;
+  padding: 1.25rem 2rem 3rem 1.5rem;
+}
+
+.staff-equip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.staff-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.25rem 0.2rem 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.staff-summary__meta {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.staff-equip__list {
+  min-height: 0;
+  flex: 1;
+  flex-shrink: 1;
+  margin: 0 -0.6rem;
+  overflow-y: auto;
+}
+
+.staff-equip__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.staff-equip__stage {
+  display: grid;
+  /* 층 버튼은 지도 오른쪽 */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1rem;
+}
+
+/* 3D는 받침 폭을 가득 채우고 높이만 제한한다 — 엔진이 상자 비율에 맞춰 층 전체를 다시 맞춘다 */
+/* 폭이 좁아 4:3보다 낮아지면(75cqw) 4:3을 지킨다(휴대폰에서는 늘 4:3) */
+.staff-equip .staff-tray {
+  container-type: inline-size;
+}
+
+.staff-equip .staff-map--3d {
+  height: min(var(--staff-map-h), 75cqw);
+}
+
+/* 2D 평면도 이미지는 세로가 긴 930×976이라 비율을 지키고 가운데 둔다 */
+.staff-equip .staff-map--2d {
+  width: min(100%, calc(var(--staff-map-h) * 930 / 976));
+  margin-inline: auto;
+}
+
+.staff-equip__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-right: calc(2.5rem + 1rem);
+}
+
+.staff-equip__zones {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 6.75rem);
+  overflow-y: auto;
+}
+
+/* 구역 패널 제목은 층(1F)만 — 사이드바 제목과 같은 크기 */
+.staff-equip__zones-title {
+  padding: 0 0.6rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .staff-led--live {
+    animation: none;
+  }
+
+  .staff *,
+  .staff *::before {
+    transition: none !important;
+  }
+}
+
+/* ── 마이페이지 ── */
+/* 사이드바 없음 — 로고는 상단 메뉴바 왼쪽(장비 검색 사이드바 로고와 같은 자리) */
+.staff-top--logo {
+  margin-left: 1.4rem;
+}
+
+.staff-top__brand {
+  margin-right: auto;
+}
+
+/* 프로필 머리글 */
+.staff-me__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.2rem 0.75rem;
+}
+
+.staff-me__name {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.staff-facts-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin-top: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.staff-facts-inline > div {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.staff-facts-inline dt {
+  color: var(--muted-foreground);
+}
+
+.staff-facts-inline dd {
+  font-weight: 600;
+}
+
+.staff-me__danger {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.staff-profile__meta {
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+
+.staff-note {
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+}
+
+/* 탈퇴는 눈에 띄지 않게 — 회색 글자, 올리면 빨강 */
+.staff-quiet-danger {
+  align-self: flex-start;
+  padding: 0.25rem 0.2rem;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.staff-quiet-danger:hover {
+  color: var(--staff-danger-text);
+}
+
+.staff-withdraw {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.staff-withdraw__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--staff-danger-text);
+}
+
+/* 본문: 머리글 아래 계정 · 화면 · 사용 이력을 같은 너비로 한 줄에 하나씩, 맨 아래 탈퇴. 가운데 정렬 */
+.staff-me {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.75rem 2rem 3rem;
+}
+
+.staff-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.staff-panel__title {
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.staff-panel__meta {
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+
+/* 설정 한 줄 — 줄 사이는 가는 선 */
+.staff-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--staff-line);
+}
+
+.staff-panel__title + .staff-setting {
+  border-top: 0;
+}
+
+.staff-setting__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.staff-setting__main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.staff-setting__label {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.staff-setting__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  font-size: 0.92rem;
+}
+
+.staff-setting__help {
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+}
+
+.staff-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+/* 펼쳐지는 입력 — 라벨은 입력칸 위 */
+.staff-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-width: 28rem;
+}
+
+.staff-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.staff-field > label {
+  padding-left: 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.staff [data-slot='input'] {
+  height: 2.6rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--staff-fill);
+  box-shadow: none;
+}
+
+.staff [data-slot='input']:focus-visible {
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.45);
+}
+
+.staff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* 단추 — 기본은 옅은 회색 알약, 확정은 진한 청록, 탈퇴 확정은 빨강 */
+.staff-btn {
+  display: inline-flex;
+  height: 2.3rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.05rem;
+  border-radius: 999px;
+  background: var(--staff-fill);
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.staff-btn:hover:not(:disabled) {
+  background: var(--staff-fill-hover);
+}
+
+.staff-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.staff-btn--primary {
+  background: var(--staff-confirm);
+  color: #fff;
+}
+
+.staff-btn--primary:hover:not(:disabled) {
+  background: var(--staff-confirm-hover);
+}
+
+.staff-btn--danger {
+  background: var(--staff-danger);
+  color: #fff;
+}
+
+.staff-btn--danger:hover:not(:disabled) {
+  background: var(--staff-danger-hover);
+}
+
+.staff-alert--ok {
+  color: var(--staff-teal-text);
+}
+
+.staff-alert--ok::before {
+  background: var(--staff-teal);
+}
+
+/* 사용 이력 — 장비마다 한 덩어리, 사이는 가는 선 */
+.staff-history {
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-history__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.95rem 0;
+  border-top: 1px solid var(--staff-line);
+}
+
+.staff-history__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.staff-history__name {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.staff-history__type {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.staff-history__grid {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.2rem 0.5rem;
+  margin-top: 0.2rem;
+  font-size: 0.87rem;
+}
+
+.staff-history__grid dt {
+  color: var(--muted-foreground);
+}
+
+.staff-history__grid time {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 2.5rem 1rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+
+/* 사이드바 안 내용(장비 검색의 검색·필터·목록) — 목록만 남는 높이를 채우고 안에서 스크롤 */
+.staff-sidebar__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-shrink: 1;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.staff-sidebar__body > * {
+  flex-shrink: 0;
+}
+
+/* 3D 지도 안의 '장비 이름 표시' — 사이드바 스위치와 같은 모양의 반투명 알약 */
+.map-label-toggle {
+  display: inline-flex;
+  height: 2rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.8rem 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--staff-surface, #fff) 78%, transparent);
+  backdrop-filter: blur(6px);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.map-label-toggle:has(input:checked) {
+  color: var(--foreground);
+}
+
+.map-label-toggle input {
+  position: relative;
+  width: 2rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--staff-track, #d4d4d4);
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 0.15s ease;
+}
+
+.map-label-toggle input::before {
+  content: '';
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.map-label-toggle input:checked {
+  background: var(--staff-teal, #0d9488);
+}
+
+.map-label-toggle input:checked::before {
+  transform: translateX(0.85rem);
+}
+
+.map-label-toggle input:focus-visible {
+  outline: 2px solid var(--staff-teal, #0d9488);
+  outline-offset: 2px;
+}
+
+/* ── 좁은 화면 ── */
+/* 휴대폰(640px 미만) — 메뉴는 햄버거로 접고, 펼친 메뉴는 메뉴바 아래에 떠 있다 */
+.staff-menu-pop {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  min-width: 11rem;
+  flex-direction: column;
+  padding: 0.5rem;
+  border-radius: 1rem;
+  background: var(--staff-surface);
+  box-shadow: var(--staff-shadow);
+}
+
+.staff-menu-pop .staff-menu__item {
+  height: 2.6rem;
+  padding: 0 0.75rem;
+  border-radius: 0.6rem;
+}
+
+.staff-menu-pop .staff-menu__item:hover {
+  background: var(--staff-hover);
+}
+
+.staff-menu-pop .staff-menu__item--on::after {
+  left: 0.75rem;
+}
+
+/* 1280px 미만 장비 검색 — 사이드바 대신 본문 위에 검색칸·상세검색·결과 단추 */
+.staff-equip__mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem 0;
+}
+
+.staff-equip__filter-row {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.staff-link-btn {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.2rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.staff-results-btn {
+  display: flex;
+  width: 100%;
+  height: 2.85rem;
+  align-items: center;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  background: var(--staff-fill);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* 층 단추를 지도 위 가로 한 줄로 */
+.staff-equip__stage--stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.staff-elevator--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  order: -1;
+}
+
+.staff-equip__stage--stacked + .staff-equip__foot {
+  padding-right: 0;
+}
+
+@media (max-width: 1279px) {
+  .staff-equip {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1rem 1rem 2.5rem;
+  }
+}
+
+@media (max-width: 639px) {
+  .staff-top {
+    margin: 0 1rem;
+    gap: 0.75rem;
+  }
+
+  .staff-equip .staff-panel {
+    padding: 1rem;
+  }
+
+  .staff-equip__foot {
+    flex-wrap: wrap;
+  }
+
+  .staff-me {
+    padding: 1.25rem 1rem 2.5rem;
+  }
+
+  .staff-setting__row {
+    align-items: flex-start;
   }
 }
