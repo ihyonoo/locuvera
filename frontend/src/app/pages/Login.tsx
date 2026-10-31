@@ -241,6 +241,7 @@ export default function Login() {
             type="button"
             variant="outline"
             size="lg"
+            className="auth-split__demo"
             onClick={() => handleDemoLogin('staff')}
             disabled={isLoading}
           >
@@ -250,6 +251,7 @@ export default function Login() {
             type="button"
             variant="outline"
             size="lg"
+            className="auth-split__demo"
             onClick={() => handleDemoLogin('admin')}
             disabled={isLoading}
           >

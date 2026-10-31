@@ -164,12 +164,18 @@ describe('auth card', () => {
     expect(body).toMatch(/justify-content:\s*center/);
   });
 
-  it('sweeps a light streak across the submit button on hover, but not when reduced motion is preferred', () => {
-    const submit = "\n.auth-split button[type='submit'][data-slot='button']";
+  it('fills and sweeps a light streak across the submit and demo buttons on hover, but not when reduced motion is preferred', () => {
     const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const streak = block(new RegExp(`${escape(submit)}::after\\s*\\{`));
-    expect(streak).toMatch(/transition:\s*left/);
-    expect(css).toMatch(new RegExp(`${escape(submit)}:hover::after`));
+    for (const button of [
+      "\n.auth-split button[type='submit'][data-slot='button']",
+      "\n.auth-split .auth-split__demo[data-slot='button']",
+    ]) {
+      const fill = block(new RegExp(`${escape(button)}:hover[^{]*\\{`));
+      expect(fill).toMatch(/background:\s*var\(--primary-solid\)/);
+      const streak = block(new RegExp(`${escape(button)}::after[^{]*\\{`));
+      expect(streak).toMatch(/transition:\s*left/);
+      expect(css).toMatch(new RegExp(`${escape(button)}:hover::after`));
+    }
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*::after\s*\{\s*transition:\s*none;/);
   });
 
