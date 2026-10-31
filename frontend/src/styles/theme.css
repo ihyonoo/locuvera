@@ -566,12 +566,19 @@
   .dot-warn { background: var(--warn-solid); }
   .dot-err { background: var(--err-solid); }
 
-  /* 지도 위 장비 점 전용 — 뱃지·범례가 쓰는 위 dot-* 톤보다 밝아야 도면 배경 위에서 잘 보인다. */
-  .map-marker-ok { background: #22c55e; }
-  .map-marker-err { background: #ef4444; }
-  .map-marker-neutral { background: #64748b; }
+  /* 지도 위 장비 점 전용 — 3D 구슬과 같은 색(lib/mapPins.ts PIN_COLORS).
+     흰 테두리와 채움의 대비가 3:1 이상이라 어느 평면도·테마 위에서도 점이 구분된다. */
+  .map-marker-ok { background: #16a34a; }
+  .map-marker-err { background: #dc2626; }
+  .map-marker-neutral { background: #475569; }
 
-  /* 선택된 장비 마커 — 흰 테두리와 글로우로 주변 점들과 확실히 구분한다. */
+  .map-marker-ok,
+  .map-marker-err,
+  .map-marker-neutral {
+    box-shadow: 0 0 0 1.5px #fff;
+  }
+
+  /* 선택된 장비 마커 — 흰 테두리와 글로우로 주변 점들과 확실히 구분한다(채움 색은 그대로). */
   .map-marker-spotlight {
     box-shadow:
       0 0 0 3px #fff,

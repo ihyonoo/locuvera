@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FloorMapViewProps } from '../FloorMapView';
 import { FLOOR_PLANS, zonePolygonsPx } from '../../lib/floor3d/floorPlans';
 import { MAP_3D_ASPECT } from '../../lib/mapDimension';
+import { isDarkThemeActive } from '../../lib/theme';
 import { equipmentLayerKey } from '../../lib/floor3d/runtime';
 import { buildFloorModel, highlightPosition, placeEquipmentOnFloor, type ZonePx } from './buildFloor';
 import { MapEngine } from './mapEngine';
@@ -49,6 +50,8 @@ export default function FloorMap3D({
         leadRef.current,
         (id) => pickRef.current(id),
         () => unavailableRef.current(),
+        // 테마는 마이페이지에서만 바뀌므로 지도를 열 때 한 번 읽는다
+        { dark: isDarkThemeActive() },
       );
     } catch {
       unavailableRef.current();
@@ -116,7 +119,7 @@ export default function FloorMap3D({
     <div
       ref={hostRef}
       data-testid="floor-map-3d"
-      className="relative w-full select-none overflow-hidden rounded-lg border border-border bg-[#eef1f3]"
+      className="relative w-full select-none overflow-hidden rounded-lg border border-border bg-[var(--map3d-stage)]"
       style={{ aspectRatio: MAP_3D_ASPECT, touchAction: 'none' }}
     >
       <svg ref={leadRef} className="pointer-events-none absolute inset-0 h-full w-full" />

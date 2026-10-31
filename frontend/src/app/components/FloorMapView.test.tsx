@@ -3,16 +3,17 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import FloorMapView from './FloorMapView';
 import { pointInPolygon, distanceToPolygonEdge, type ZonePoint } from '../lib/floorMapLayout';
 
-function mockContainerRect() {
+// 지도 상자 폭 — 핀 지름은 이 폭의 2%다(기본 700px → 14px)
+function mockContainerRect(width = 700) {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
     x: 0,
     y: 0,
     left: 0,
     top: 0,
-    right: 1000,
-    bottom: 1000,
-    width: 1000,
-    height: 1000,
+    right: width,
+    bottom: width,
+    width,
+    height: width,
     toJSON: () => {},
   });
 }
@@ -481,5 +482,47 @@ describe('FloorMapView real-hardware spotlight', () => {
 
     const spotlight = screen.getByTestId('floor-map-spotlight');
     expect(within(spotlight).queryByTestId('floor-map-spotlight-hole-M999')).not.toBeInTheDocument();
+  });
+});
+
+describe('FloorMapView pin size follows the map like a photo', () => {
+  function renderAtWidth(width: number) {
+    vi.restoreAllMocks();
+    mockContainerRect(width);
+    render(
+      <FloorMapView
+        floor={1}
+        pins={[{ reader_id: 'M101', label: '병동 A' }]}
+        equipment={[
+          { tag_id: 'EQ-0001', reader_id: 'M101', label: '수액펌프 1호' },
+          { tag_id: 'EQ-0002', reader_id: 'M101', label: '수액펌프 2호' },
+        ]}
+        zoneBounds={SQUARE_BOUNDS}
+        spotlightTagId="EQ-0001"
+      />,
+    );
+  }
+
+  it('makes a normal dot 2% of the map box width', () => {
+    renderAtWidth(500);
+    expect(screen.getByTestId('floor-map-equipment-dot-EQ-0002').style.width).toBe('10px');
+  });
+
+  it('keeps the spotlight dot and ring in the old 14 : 22 : 40 proportion', () => {
+    renderAtWidth(500);
+    expect(parseFloat(screen.getByTestId('floor-map-equipment-dot-EQ-0001').style.width)).toBeCloseTo((10 * 22) / 14);
+    expect(parseFloat(screen.getByTestId('floor-map-equipment-ring-EQ-0001').style.width)).toBeCloseTo((10 * 40) / 14);
+  });
+
+  it('keeps the touch target at 28px even when the dot is tiny', () => {
+    renderAtWidth(330);
+    const button = screen.getByTestId('floor-map-equipment-EQ-0002');
+    expect(button.style.width).toBe('28px');
+    expect(button.style.height).toBe('28px');
+  });
+
+  it('marks the floor plan image so dark mode can invert it', () => {
+    renderAtWidth(500);
+    expect(screen.getByRole('img', { name: '1층 평면도' })).toHaveClass('floor-map__plan');
   });
 });
