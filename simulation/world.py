@@ -92,7 +92,13 @@ class World:
 
     @property
     def concurrent_checkouts(self) -> int:
-        return sum(1 for tag in self.tags.values() if tag.state is not AssetState.AVAILABLE and not tag.pending)
+        return sum(
+            1
+            for tag in self.tags.values()
+            if tag.state is not AssetState.AVAILABLE
+            and not tag.pending
+            and tag.item.profile.slug not in demand.BAND_EXEMPT_SLUGS
+        )
 
     def state_of(self, tag_id: str) -> AssetState:
         return self.tags[tag_id].state
@@ -194,8 +200,10 @@ class World:
         for tag in self.tags.values():
             if tag.state is not AssetState.AVAILABLE or tag.pending:
                 continue
-            surge = self._surge.factor(tag.item.profile.demand_class, now)
-            probability = min(1.0, demand.checkout_probability(tag.item.profile, moment, feedback, interval) * surge)
+            profile = tag.item.profile
+            surge = self._surge.factor(profile.demand_class, now)
+            tag_feedback = demand.effective_feedback(profile, feedback)
+            probability = min(1.0, demand.checkout_probability(profile, moment, tag_feedback, interval) * surge)
             if self._rng.random() >= probability:
                 continue
             borrower = roster.pick_borrower(tag.item, moment, self._rng)
