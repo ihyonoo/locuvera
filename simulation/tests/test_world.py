@@ -110,6 +110,40 @@ class TestCheckoutLifecycle:
         instance.confirm_checkout(command.tag_id, 1100.0)
         assert instance.concurrent_checkouts == 1
 
+    def test_concurrent_count_ignores_band_exempt_types(self):
+        instance = _fresh_world(seed=3)
+        command = _first_checkout(instance, exempt=True)
+        instance.confirm_checkout(command.tag_id, 1100.0)
+        assert instance.state_of(command.tag_id) is not behavior.AssetState.AVAILABLE
+        assert instance.concurrent_checkouts == 0
+
+
+class TestChronicShortage:
+    def test_exempt_types_stay_mostly_checked_out_on_a_weekday(self, monkeypatch):
+        # RSSI 생성은 대여 상태와 무관하고 느리므로 끈다
+        monkeypatch.setattr(world.World, "_broadcast", lambda *args, **kwargs: None)
+        start = WEEKDAY_10AM.replace(hour=6)
+        instance = world.World(rng=random.Random(5), now=0.0)
+        busy: dict[str, list[float]] = {slug: [] for slug in demand.BAND_EXEMPT_SLUGS}
+        physics_sec = 1.0
+        now = 0.0
+        while now < 12 * 3600:
+            instance.tick_physics(now, physics_sec)
+            if now % world.BEHAVIOR_TICK_SEC == 0:
+                moment = start + dt.timedelta(seconds=now)
+                for command in instance.tick_behavior(moment, now):
+                    instance.confirm_checkout(command.tag_id, now)
+                for command in instance.due_returns(moment, now):
+                    instance.confirm_return(command.tag_id, now)
+                if 10 <= moment.hour < 17 and now % 600 == 0:
+                    for slug in busy:
+                        tags = [t for t in instance.tags.values() if t.item.profile.slug == slug]
+                        in_use = sum(t.state is not behavior.AssetState.AVAILABLE for t in tags)
+                        busy[slug].append(in_use / len(tags))
+            now += physics_sec
+        for slug, samples in busy.items():
+            assert sum(samples) / len(samples) >= 0.8, slug
+
 
 class TestMovementIntegration:
     def test_a_tag_only_ever_moves_between_adjacent_zones(self):
@@ -244,11 +278,13 @@ class TestAdoptCheckedOut:
         assert not instance.tags[command.tag_id].pending
 
 
-def _first_checkout(instance: world.World) -> world.CheckoutCommand:
+def _first_checkout(instance: world.World, *, exempt: bool = False) -> world.CheckoutCommand:
+    """동시 대여 보정 제외 여부가 exempt와 같은 첫 대여 명령."""
     now = 1000.0
     for _ in range(2000):
         now += world.BEHAVIOR_TICK_SEC
-        commands = instance.tick_behavior(WEEKDAY_10AM, now)
-        if commands:
-            return commands[0]
+        for command in instance.tick_behavior(WEEKDAY_10AM, now):
+            slug = equipment.EQUIPMENT_BY_TAG[command.tag_id].profile.slug
+            if (slug in demand.BAND_EXEMPT_SLUGS) == exempt:
+                return command
     raise AssertionError("대여 명령이 나오지 않았다")

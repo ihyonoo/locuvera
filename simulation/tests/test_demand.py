@@ -2,7 +2,7 @@ import datetime as dt
 import random
 
 from simulation import demand
-from simulation.topology.equipment import DemandClass
+from simulation.topology.equipment import TYPES, DemandClass
 
 WEEKDAY_10AM = dt.datetime(2026, 8, 12, 10, 0, tzinfo=demand.KST)  # 수요일
 WEEKDAY_3AM = dt.datetime(2026, 8, 12, 3, 0, tzinfo=demand.KST)
@@ -59,10 +59,10 @@ class TestDayMultiplier:
 
 class TestTargetBand:
     def test_daytime_band(self):
-        assert demand.target_band(WEEKDAY_10AM) == (8, 14)
+        assert demand.target_band(WEEKDAY_10AM) == (5, 9)
 
     def test_nighttime_band(self):
-        assert demand.target_band(WEEKDAY_3AM) == (2, 4)
+        assert demand.target_band(WEEKDAY_3AM) == (1, 3)
 
 
 class TestFeedbackFactor:
@@ -82,6 +82,23 @@ class TestFeedbackFactor:
     def test_is_monotonic_in_the_concurrent_count(self):
         values = [demand.feedback_factor(n, (8, 14)) for n in range(0, 30)]
         assert values == sorted(values, reverse=True)
+
+
+class TestBandExemption:
+    def test_exempt_types_ignore_feedback(self):
+        for slug in demand.BAND_EXEMPT_SLUGS:
+            assert demand.effective_feedback(TYPES[slug], 0.5) == 1.0
+
+    def test_other_types_keep_feedback(self):
+        for slug, profile in TYPES.items():
+            if slug not in demand.BAND_EXEMPT_SLUGS:
+                assert demand.effective_feedback(profile, 0.5) == 0.5
+
+    def test_exempt_types_are_acute_and_not_essential(self):
+        # 외래 계열은 야간·주말에 쉬므로 만성 부족 대상이 아니다
+        for slug in demand.BAND_EXEMPT_SLUGS:
+            assert TYPES[slug].demand_class is DemandClass.ACUTE
+        assert not demand.BAND_EXEMPT_SLUGS & {"defib", "crash", "pump"}
 
 
 class TestNightSurge:

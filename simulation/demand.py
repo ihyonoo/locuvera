@@ -36,11 +36,15 @@ _OUTPATIENT_BY_WEEKDAY = (1.0, 1.0, 1.0, 1.0, 1.0, 0.45, 0.05)
 SATURDAY_AFTERNOON_HOUR = 13
 SATURDAY_AFTERNOON_MULTIPLIER = 0.05
 
-# 목표 동시 대여 밴드.
-DAY_BAND = (8, 14)
-NIGHT_BAND = (2, 4)
+# 목표 동시 대여 밴드. 아래 만성 부족 5종(19대)은 세지 않으므로 나머지 31대 기준이다.
+DAY_BAND = (5, 9)
+NIGHT_BAND = (1, 3)
 NIGHT_START_HOUR = 23
 NIGHT_END_HOUR = 7
+
+# 만성 부족 장비 — 중환자실·분만실에서 늘 모자라는 급성기 5종.
+# 동시 대여 수에 세지 않고 피드백도 받지 않는다. 세면 나머지 장비의 대여가 피드백 하한까지 깎인다.
+BAND_EXEMPT_SLUGS = frozenset({"syringe", "monitor", "vent", "suction", "ctg"})
 
 # 피드백 계수 범위. 개별 이벤트의 확률성을 죽이지 않도록 좁게 잡는다.
 FEEDBACK_MIN = 0.5
@@ -116,6 +120,10 @@ class NightSurge:
         if demand_class is not DemandClass.ACUTE or now >= self._until:
             return 1.0
         return NIGHT_SURGE_MULTIPLIER
+
+
+def effective_feedback(profile: EquipmentType, feedback: float) -> float:
+    return 1.0 if profile.slug in BAND_EXEMPT_SLUGS else feedback
 
 
 def checkout_probability(profile: EquipmentType, moment: dt.datetime, feedback: float, interval_sec: float) -> float:
