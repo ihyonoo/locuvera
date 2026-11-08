@@ -234,17 +234,18 @@ describe('EquipmentUtilization', () => {
     expect(detail()).toHaveTextContent('가장 바쁜 12시대 32%');
   });
 
-  it('refetches with the chosen period', async () => {
+  it('opens on the last 7 days and refetches with the chosen period', async () => {
     const fetchMock = mockApi();
     renderPage();
     await screen.findByRole('group', { name: '장비 종류' });
+    expect(fetchMock.mock.calls[0][0]).toContain('/admin/utilization?days=7');
+    expect(screen.getByRole('button', { name: '7일' })).toHaveAttribute('aria-pressed', 'true');
 
-    fireEvent.click(screen.getByRole('button', { name: '7일' }));
+    fireEvent.click(screen.getByRole('button', { name: '30일' }));
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('days=7'), expect.anything()),
+      expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('days=30'), expect.anything()),
     );
-    expect(fetchMock.mock.calls[0][0]).toContain('/admin/utilization?days=30');
   });
 
   it('shows the empty state when nothing was checked out', async () => {
