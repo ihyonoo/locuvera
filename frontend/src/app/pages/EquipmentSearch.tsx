@@ -109,6 +109,8 @@ function getAssetStatusLabel(status: string) {
 // 위치 미확인(오프라인) 태그의 표시용 라벨. 좌측 "장비 목록"에는 그대로 노출되어야 하지만,
 // 우측 위치 패널 그리드·위치 필터 드롭다운에는 실제 위치가 아니므로 절대 새어 들어가면 안 된다.
 const UNLOCATED_LABEL = '감지 안 됨';
+// 응답을 받은 뒤 다음 실시간 위치 요청까지 기다리는 시간(ms). 위치 전환이 화면에 늦게 뜨지 않도록 짧게 둔다
+const LIVE_POLL_MS = 500;
 
 export default function EquipmentSearch() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -548,7 +550,7 @@ export default function EquipmentSearch() {
         requestController = undefined;
         if (!cancelled) {
           setIsLoading(false);
-          pollTimer = window.setTimeout(fetchLiveLocations, 1000);
+          pollTimer = window.setTimeout(fetchLiveLocations, LIVE_POLL_MS);
         }
       }
     };
