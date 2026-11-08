@@ -157,3 +157,14 @@ def test_sender_uses_server_date_after_reader_clock_is_wrong(monkeypatch):
     assert sent[1]["headers"]["X-RTLS-Timestamp"] == "1000"
     assert json.loads(sent[1]["data"])["ts"] == 1000
     assert json.loads(sent[1]["data"])["observations"][0]["last_seen"] == 1000
+
+
+def test_window_length_comes_from_env(monkeypatch):
+    monkeypatch.setenv("RTLS_WINDOW_SEC", "2")
+    assert _load_reader_module().WINDOW_SEC == 2.0
+
+
+def test_window_length_defaults_to_five_seconds(monkeypatch):
+    monkeypatch.delenv("RTLS_WINDOW_SEC", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *_args, **_kwargs: False)
+    assert _load_reader_module().WINDOW_SEC == 5.0

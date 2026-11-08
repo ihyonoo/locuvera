@@ -1,7 +1,8 @@
 """HYST_DB(히스테리시스)/DWELL_SEC(체류)/STALE_SEC(신선도)로 위치 판정 플래핑을 막는
 /ingest 로직 통합 테스트.
 
-backend/settings.py 기준 HYST_DB=10, DWELL_SEC=3, STALE_SEC=5.
+backend/settings.py 기준 시뮬레이션 리더는 HYST_DB=10, DWELL_SEC=3, STALE_SEC=5.
+실물 리더(RTLS_REAL_READER_KEYS)는 REAL_HYST_DB=6, REAL_DWELL_SEC=1, REAL_STALE_SEC=3.
 """
 
 import pytest
@@ -13,8 +14,9 @@ from backend.tests.conftest import post_signed_ingest
 
 @pytest.fixture(autouse=True)
 def _registered_readers(seed_reader):
-    seed_reader("M503")
-    seed_reader("M504")
+    # 기본 파라미터를 검증하는 리더는 시뮬레이션 리더다
+    seed_reader("M503", is_real_hardware=False)
+    seed_reader("M504", is_real_hardware=False)
 
 
 def test_history_failure_does_not_publish_location_or_memory_state(seed_tag, monkeypatch):
@@ -158,3 +160,53 @@ class TestIngestDecisionSequence:
                 (tag_id,),
             )
             assert cur.fetchall() == [("M503", 0), ("M504", 6), ("M503", 16)]
+
+
+class TestRealHardwareParams:
+    """실물 리더(M501·M502)가 보낸 관측은 REAL_HYST_DB=6, REAL_DWELL_SEC=1, REAL_STALE_SEC=3으로 판정한다."""
+
+    @pytest.fixture(autouse=True)
+    def _real_readers(self, seed_reader):
+        seed_reader("M501", is_real_hardware=True)
+        seed_reader("M502", is_real_hardware=True)
+
+    def test_switches_after_real_hysteresis_and_one_second_dwell(self, client, seed_tag, monkeypatch):
+        tag_id = seed_tag()
+        _post_ingest(client, monkeypatch, now=0, reader_id="M501", tag_id=tag_id, rssi=-60)
+
+        # 7dB 차: 실물 히스테리시스(6dB)는 넘고 운영 기본값(10dB)에는 못 미친다
+        _post_ingest(client, monkeypatch, now=1, reader_id="M502", tag_id=tag_id, rssi=-53)
+        assert tag_state[tag_id]["candidate_reader"] == "M502"
+
+        _post_ingest(client, monkeypatch, now=2, reader_id="M502", tag_id=tag_id, rssi=-53)
+        assert tag_state[tag_id]["current_reader"] == "M502"
+
+    def test_difference_below_real_hysteresis_does_not_switch(self, client, seed_tag, monkeypatch):
+        tag_id = seed_tag()
+        _post_ingest(client, monkeypatch, now=0, reader_id="M501", tag_id=tag_id, rssi=-60)
+
+        for now in (1, 2, 3):
+            _post_ingest(client, monkeypatch, now=now, reader_id="M502", tag_id=tag_id, rssi=-55)
+
+        assert tag_state[tag_id]["current_reader"] == "M501"
+        assert tag_state[tag_id]["candidate_reader"] is None
+
+    def test_current_reader_expires_after_real_freshness_limit(self, client, seed_tag, monkeypatch):
+        tag_id = seed_tag()
+        _post_ingest(client, monkeypatch, now=0, reader_id="M501", tag_id=tag_id, rssi=-40)
+
+        # M501 관측이 4초 지나 실물 신선도(3초)를 넘었다 → 훨씬 약한 M502도 후보가 된다
+        _post_ingest(client, monkeypatch, now=4, reader_id="M502", tag_id=tag_id, rssi=-70)
+        assert tag_state[tag_id]["candidate_reader"] == "M502"
+        _post_ingest(client, monkeypatch, now=5, reader_id="M502", tag_id=tag_id, rssi=-70)
+        assert tag_state[tag_id]["current_reader"] == "M502"
+
+    def test_simulated_readers_keep_default_params(self, client, seed_tag, monkeypatch):
+        tag_id = seed_tag(is_real_hardware=False)
+        _post_ingest(client, monkeypatch, now=0, reader_id="M503", tag_id=tag_id, rssi=-60)
+
+        # 같은 7dB 차라도 시뮬레이션 리더는 운영 기본값(10dB)이라 전환하지 않는다
+        for now in (1, 2, 3, 4):
+            _post_ingest(client, monkeypatch, now=now, reader_id="M504", tag_id=tag_id, rssi=-53)
+
+        assert tag_state[tag_id]["current_reader"] == "M503"

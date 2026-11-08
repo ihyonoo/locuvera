@@ -12,10 +12,9 @@ os.environ["REDIS_URL"] = "redis://127.0.0.1:6379/1"
 # NTAG 마스터키도 settings.py가 import 시점에 읽는다. 실물 태그 검증이 걸린 테스트가
 # .env의 유무에 따라 통과하다 말다 하지 않도록 여기서 고정한다.
 os.environ["NTAG_MASTER_KEY"] = "000102030405060708090A0B0C0D0E0F"
+# 운영과 같이 실물 리더는 M501·M502뿐이다. 이 목록의 리더는 실물 판정 파라미터를 받는다.
 os.environ["RTLS_REAL_READER_KEYS"] = (
-    '{"M501":"test-reader-key-32-bytes-000001",'
-    '"M503":"test-reader-key-32-bytes-000003",'
-    '"M504":"test-reader-key-32-bytes-000004"}'
+    '{"M501":"test-reader-key-32-bytes-000001","M502":"test-reader-key-32-bytes-000002"}'
 )
 os.environ["RTLS_SIM_KEY"] = "test-simulation-master-key-000001"
 

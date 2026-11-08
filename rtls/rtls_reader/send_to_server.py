@@ -23,7 +23,7 @@ READER_ID = os.getenv("RTLS_READER_ID", "M501")  # Reader의 논리적 ID
 READER_KEY = os.getenv("RTLS_READER_KEY", "")
 
 # 윈도우를 사용하는 이유: RSSI의 튐 현상, 노이즈 감소를 위해
-WINDOW_SEC = 5.0  # 수집 윈도우(최근 5초 동안의 RSSI를 수집)
+WINDOW_SEC = float(os.getenv("RTLS_WINDOW_SEC", "5"))  # 수집 윈도우(최근 N초 동안의 RSSI 중앙값)
 SEND_EVERY_SEC = 1.0  # 전송 주기(1초마다 서버로 전송)
 
 
