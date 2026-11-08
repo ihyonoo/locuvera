@@ -1,6 +1,19 @@
 from simulation import reader
 
 
+class TestBatteryLevel:
+    def test_each_tag_keeps_a_fixed_level_within_range(self):
+        level = reader.tag_battery_pct("EQ-0001")
+        assert level == reader.tag_battery_pct("EQ-0001")
+        assert 15 <= level <= 100
+
+    def test_payload_carries_the_tag_battery_level(self):
+        window = reader.ReaderWindow("M203")
+        window.add("EQ-0001", -70.0, at=100.0)
+        observation = window.build_payload(now=100.5)["observations"][0]
+        assert observation["battery_pct"] == reader.tag_battery_pct("EQ-0001")
+
+
 class TestBuildPayload:
     def test_payload_shape_matches_the_backend_schema(self):
         window = reader.ReaderWindow("M203")
@@ -11,7 +24,7 @@ class TestBuildPayload:
         assert payload["reader_id"] == "M203"
         assert isinstance(payload["ts"], int)
         observation = payload["observations"][0]
-        assert set(observation) == {"tag_id", "rssi", "count", "last_seen"}
+        assert set(observation) == {"tag_id", "rssi", "count", "last_seen", "battery_pct"}
         assert isinstance(observation["rssi"], int)
         assert isinstance(observation["count"], int)
         assert isinstance(observation["last_seen"], int)

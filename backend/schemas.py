@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Observation(BaseModel):
@@ -6,6 +6,8 @@ class Observation(BaseModel):
     rssi: int
     count: int
     last_seen: int
+    # 비콘 배터리 잔량(%). 잔량을 모르는 리더는 보내지 않는다
+    battery_pct: int | None = Field(default=None, ge=0, le=100)
 
 
 class Payload(BaseModel):

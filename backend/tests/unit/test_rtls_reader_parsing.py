@@ -34,8 +34,10 @@ reader = _load_reader_module()
 class FakeAdvertisement:
     """bleak의 AdvertisementData 중 파서가 실제로 읽는 필드만 흉내낸다."""
 
-    def __init__(self, manufacturer_data):
+    def __init__(self, manufacturer_data, service_data=None, rssi=-50):
         self.manufacturer_data = manufacturer_data
+        self.service_data = service_data or {}
+        self.rssi = rssi
 
 
 def build_ibeacon_payload(uuid_hex: str, major: int, minor: int) -> bytes:
@@ -168,3 +170,67 @@ def test_window_length_defaults_to_five_seconds(monkeypatch):
     monkeypatch.delenv("RTLS_WINDOW_SEC", raising=False)
     monkeypatch.setattr("dotenv.load_dotenv", lambda *_args, **_kwargs: False)
     assert _load_reader_module().WINDOW_SEC == 5.0
+
+
+FEASY_UUID = "0000fff0-0000-1000-8000-00805f9b34fb"
+
+
+def feasy_frame(battery: int, length: int = 11) -> bytes:
+    """Feasycom 일반 광고 프레임: 모델 1 + 버전 1 + 기능 2 + MAC 6 + 잔량 1 (2026-11-09 실측값 기반)."""
+    return (bytes.fromhex("2e022892dc0d3080c333") + bytes([battery]))[-length:]
+
+
+class TestFeasyBatteryParsing:
+    def test_reads_battery_percent_from_the_feasycom_frame(self):
+        assert reader.parse_feasy_battery(FakeAdvertisement({}, {FEASY_UUID: feasy_frame(0x64)})) == 100
+
+    def test_ignores_the_external_power_marker(self):
+        assert reader.parse_feasy_battery(FakeAdvertisement({}, {FEASY_UUID: feasy_frame(0x65)})) is None
+
+    def test_ignores_a_frame_of_another_length(self):
+        assert reader.parse_feasy_battery(FakeAdvertisement({}, {FEASY_UUID: feasy_frame(50, length=10)})) is None
+
+    def test_ignores_an_advertisement_without_the_frame(self):
+        assert reader.parse_feasy_battery(FakeAdvertisement({})) is None
+
+
+def _send_one_pass(monkeypatch) -> dict:
+    monkeypatch.setattr(reader, "READER_ID", "M501")
+    monkeypatch.setattr(reader, "READER_KEY", "test-reader-key-32-bytes-000001", raising=False)
+    captured = []
+
+    def post(_url, **kwargs):
+        captured.append(kwargs)
+        return types.SimpleNamespace(raise_for_status=lambda: None)
+
+    async def stop_after_one_pass(_delay):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(reader.requests, "post", post)
+    monkeypatch.setattr(reader.asyncio, "sleep", stop_after_one_pass)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(reader.sender_loop())
+    return json.loads(captured[0]["data"])
+
+
+def test_sender_reports_the_battery_heard_from_the_same_beacon(monkeypatch):
+    reader.tag_samples.clear()
+    reader.tag_battery.clear()
+    monkeypatch.setattr(reader.time, "time", lambda: 100)
+    beacon = {0x004C: build_ibeacon_payload(REAL_UUID_HEX, 1, 2)}
+
+    reader.on_scan(None, FakeAdvertisement(beacon, {FEASY_UUID: feasy_frame(87)}))
+
+    observation = _send_one_pass(monkeypatch)["observations"][0]
+    assert observation["tag_id"].endswith(":1:002")
+    assert observation["battery_pct"] == 87
+
+
+def test_sender_leaves_battery_out_when_none_was_heard(monkeypatch):
+    reader.tag_samples.clear()
+    reader.tag_battery.clear()
+    monkeypatch.setattr(reader.time, "time", lambda: 100)
+
+    reader.on_scan(None, FakeAdvertisement({0x004C: build_ibeacon_payload(REAL_UUID_HEX, 1, 2)}))
+
+    assert "battery_pct" not in _send_one_pass(monkeypatch)["observations"][0]

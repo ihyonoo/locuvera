@@ -23,7 +23,11 @@ type LiveTagItem = {
   is_online: boolean;
   last_seen: number | null;
   is_real_hardware?: boolean;
+  battery_pct?: number | null;
 };
+
+// 이 잔량(%) 미만이면 전지 교체를 알린다
+const LOW_BATTERY_PCT = 20;
 
 function dotClass(isOnline: boolean) {
   return isOnline ? 'staff-led' : 'staff-led staff-led--off';
@@ -201,6 +205,14 @@ export default function DeviceStatus() {
                       {t.is_online ? '감지 중' : '감지 안 됨'}
                     </div>
                     <div className="staff-note mt-1">마지막 수신: {formatSeen(t.last_seen)}</div>
+                    {typeof t.battery_pct !== 'number' ? null : t.battery_pct < LOW_BATTERY_PCT ? (
+                      <div className="staff-status mt-1">
+                        <span className="staff-led staff-led--warn" />
+                        배터리 {t.battery_pct}% · 교체 필요
+                      </div>
+                    ) : (
+                      <div className="staff-note mt-1">배터리 {t.battery_pct}%</div>
+                    )}
                   </div>
                 </div>
               ))
