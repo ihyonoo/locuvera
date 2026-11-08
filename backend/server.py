@@ -34,7 +34,7 @@ try:
         send_reset_email,
         send_verification_email,
     )
-    from backend.location_decision import decide_transition, new_tag_state
+    from backend.location_decision import DEFAULT_PARAMS, REAL_HW_PARAMS, decide_transition, new_tag_state
     from backend.nfc_tap import consume_tap_session, master_key_missing, verify_tap_and_mint_session
     from backend.ntag424 import UID_RE, parse_sdm_params
     from backend.rtls_auth import authenticated_ingest_payload
@@ -87,6 +87,7 @@ try:
         PASSWORD_RESET_TTL_SEC,
         READER_LOCATION,
         READER_OFFLINE_SEC,
+        RTLS_REAL_READER_KEYS,
         TAG_OFFLINE_SEC,
     )
     from backend.usage_history_service import (
@@ -129,7 +130,7 @@ except ModuleNotFoundError as exc:
         send_reset_email,
         send_verification_email,
     )
-    from location_decision import decide_transition, new_tag_state
+    from location_decision import DEFAULT_PARAMS, REAL_HW_PARAMS, decide_transition, new_tag_state
     from nfc_tap import consume_tap_session, master_key_missing, verify_tap_and_mint_session
     from ntag424 import UID_RE, parse_sdm_params
     from rtls_auth import authenticated_ingest_payload
@@ -182,6 +183,7 @@ except ModuleNotFoundError as exc:
         PASSWORD_RESET_TTL_SEC,
         READER_LOCATION,
         READER_OFFLINE_SEC,
+        RTLS_REAL_READER_KEYS,
         TAG_OFFLINE_SEC,
     )
     from usage_history_service import (
@@ -976,6 +978,8 @@ def google_complete(body: GoogleCompleteRequest):
 def ingest(payload: Annotated[Payload, Depends(authenticated_ingest_payload)]):
     now = int(time.time())
     reader_id = payload.reader_id
+    # 실물 리더(인증이 RTLS_REAL_READER_KEYS로 확인한 리더)는 전용 판정 값을 쓴다
+    params = REAL_HW_PARAMS if reader_id in RTLS_REAL_READER_KEYS else DEFAULT_PARAMS
     reader_locations = load_reader_location_map()
     db_updates: dict[str, tuple[str, int | None, int]] = {}
 
@@ -1000,7 +1004,7 @@ def ingest(payload: Annotated[Payload, Depends(authenticated_ingest_payload)]):
                 "last_seen": observation.last_seen,
                 "recv_ts": now,
             }
-            transition = decide_transition(staged_obs[tag_id], staged_state[tag_id], now)
+            transition = decide_transition(staged_obs[tag_id], staged_state[tag_id], now, params)
             if transition is not None:
                 db_updates[tag_id] = transition
 

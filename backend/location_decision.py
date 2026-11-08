@@ -7,9 +7,9 @@
 from dataclasses import dataclass
 
 try:
-    from backend.settings import DWELL_SEC, HYST_DB, STALE_SEC
+    from backend.settings import DWELL_SEC, HYST_DB, REAL_DWELL_SEC, REAL_HYST_DB, REAL_STALE_SEC, STALE_SEC
 except ModuleNotFoundError:
-    from settings import DWELL_SEC, HYST_DB, STALE_SEC
+    from settings import DWELL_SEC, HYST_DB, REAL_DWELL_SEC, REAL_HYST_DB, REAL_STALE_SEC, STALE_SEC
 
 # 현재 리더의 관측이 만료됐을 때 비교에 쓰는 값.
 # 어떤 후보에게도 지게 만들어, 갱신이 끊긴 리더가 히스테리시스 뒤에 숨지 못하게 한다.
@@ -27,6 +27,8 @@ class DecisionParams:
 
 
 DEFAULT_PARAMS = DecisionParams()
+# 실물 리더가 보낸 관측의 판정 값(/ingest가 고른다)
+REAL_HW_PARAMS = DecisionParams(hyst_db=REAL_HYST_DB, dwell_sec=REAL_DWELL_SEC, stale_sec=REAL_STALE_SEC)
 
 
 def new_tag_state() -> dict:

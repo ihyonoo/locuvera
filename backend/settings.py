@@ -81,6 +81,11 @@ READER_LOCATION = {
 HYST_DB = 10
 DWELL_SEC = 3
 STALE_SEC = 5
+# 실물 리더(RTLS_REAL_READER_KEYS) 전용 판정 값. 리더 간격이 좁은 실물 배치에서 빨리 전환되도록 위 기본값보다 낮다
+# 위 기본값은 시뮬레이션 평가의 근거라 그대로 두고, 실측 조정은 루트 .env로 덮어쓴다
+REAL_HYST_DB = int(os.getenv("RTLS_REAL_HYST_DB", "6"))
+REAL_DWELL_SEC = int(os.getenv("RTLS_REAL_DWELL_SEC", "1"))
+REAL_STALE_SEC = int(os.getenv("RTLS_REAL_STALE_SEC", "3"))
 READER_OFFLINE_SEC = 10
 TAG_OFFLINE_SEC = 10
 
