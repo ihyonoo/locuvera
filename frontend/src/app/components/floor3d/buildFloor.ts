@@ -233,14 +233,9 @@ function createMaterials() {
     }),
     surgery: std(0xffffff, 0.4, 0, { map: gridVinylTex('#b8d6d3', 'rgba(40,90,90,.35)') }),
   };
-  // 실물 리더 강조 때 나머지 구역을 어둡게 그릴 바닥
-  const dimmed = Object.fromEntries(
-    Object.entries(zone).map(([k, m]) => [k, std(0x7d8590, 0.6, 0, { map: m.map })]),
-  ) as Record<ZoneKind, THREE.MeshStandardMaterial>;
   return {
     corridor: std(0xffffff, 0.3, 0, { map: porcelainTex() }),
     zone,
-    dimmed,
     office: std(0xffffff, 0.9, 0, { map: carpetTex('#9aa7b4', '#6f7d8b') }),
     service: std(0xffffff, 0.8, 0, { map: concreteTex() }),
     wcFloor: std(0xffffff, 0.4, 0, { map: smallTileTex() }),
@@ -275,6 +270,77 @@ function createMaterials() {
   };
 }
 const mats = () => (materials ??= createMaterials());
+
+// 강조 구역 밖은 2D 지도 덮개와 같은 색을 같은 비율로 섞는다(FloorMapView의 #0f2e4f, 0.6)
+const DIM_INK = new THREE.Color(0x0f2e4f);
+const DIM_MIX = 0.6;
+// 공유 재질마다 어두운 사본 하나. 공유 재질처럼 해제하지 않는다
+const dimmedMaterials = new WeakMap<THREE.Material, THREE.Material>();
+
+function dimColor(color: THREE.Color) {
+  const c = color.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
+  const ink = DIM_INK.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
+  color.setRGB(
+    c.r + (ink.r - c.r) * DIM_MIX,
+    c.g + (ink.g - c.g) * DIM_MIX,
+    c.b + (ink.b - c.b) * DIM_MIX,
+    THREE.SRGBColorSpace,
+  );
+}
+
+function dimmedCopy(material: THREE.Material) {
+  let copy = dimmedMaterials.get(material);
+  if (!copy) {
+    copy = material.clone();
+    dimColor((copy as THREE.MeshStandardMaterial).color);
+    dimmedMaterials.set(material, copy);
+  }
+  return copy;
+}
+
+// 벽 면 밖으로 이만큼 떨어진 점이 구역 안이면 그 면이 구역을 본다(외벽 중심선과 구역 경계의 차이 4.5보다 크게)
+const FACE_PROBE = 3;
+// BoxGeometry 면 순서(+x -x +y -y +z -z)에서 두꺼운 두 면
+const FACE_PLUS_Z = 4;
+const FACE_MINUS_Z = 5;
+
+// 강조 구역만 두고 층 모형 전체를 어둡게 한다
+// - 남기는 것: 그 구역의 바닥·걸레받이·이름판(userData.readerId)
+// - 구조물(structure: 벽·창·문)은 구역 안을 보는 면만 남긴다. 양쪽 다 구역 안이면(구역 안 문짝) 통째로 남긴다
+// - 이웃 실의 걸레받이처럼 structure가 아닌 조각은 경계 옆이어도 어둡게 둔다
+export function dimOutsideSpotlight(root: THREE.Object3D, litZones: ZonePx[], structure: ReadonlySet<THREE.Material>) {
+  const lit = new Set(litZones.map((z) => z.readerId));
+  const inLit = (p: Px) => litZones.some((z) => contains(p, z.poly));
+  // 구역 안을 보는 면: 'all' | 면 번호 | null
+  const litFace = (mesh: THREE.Mesh) => {
+    const ends = mesh.userData.seg as [Px, Px] | undefined;
+    if (!ends || !structure.has(mesh.material as THREE.Material)) return null;
+    const [a, c] = ends;
+    const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    // 상자의 +z 면 법선(평면 좌표). seg의 rotation.y = -atan2(dy, dx)에서 나온다
+    const n: Px = [-(c[1] - a[1]) / len, (c[0] - a[0]) / len];
+    const d = (mesh.geometry as THREE.BoxGeometry).parameters.depth / 2 + FACE_PROBE;
+    const mid = lerp(a, c, 0.5);
+    const plus = inLit([mid[0] + n[0] * d, mid[1] + n[1] * d]);
+    const minus = inLit([mid[0] - n[0] * d, mid[1] - n[1] * d]);
+    if (plus && minus) return 'all';
+    return plus ? FACE_PLUS_Z : minus ? FACE_MINUS_Z : null;
+  };
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || lit.has(mesh.userData.readerId)) return;
+    const face = litFace(mesh);
+    if (face === 'all') return;
+    if (face !== null) {
+      const material = mesh.material as THREE.Material;
+      mesh.material = Array.from({ length: 6 }, (_, i) => (i === face ? material : dimmedCopy(material)));
+      return;
+    }
+    // 메쉬가 가진 재질(구역 이름판)은 층과 함께 해제되므로 제자리에서 바꾼다
+    if (mesh.userData.ownsMaterial) dimColor((mesh.material as THREE.MeshBasicMaterial).color);
+    else mesh.material = Array.isArray(mesh.material) ? mesh.material.map(dimmedCopy) : dimmedCopy(mesh.material);
+  });
+}
 
 // ── 기하 도우미 ───────────────────────────────────────
 const lerp = (a: Px, b: Px, t: number): Px => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -334,13 +400,15 @@ class Builder {
     mesh.rotation.y = -Math.atan2(dy, dx);
     mesh.castShadow = cast;
     mesh.receiveShadow = true;
+    mesh.userData.seg = [a, b];
     this.root.add(mesh);
+    return mesh;
   }
 }
 
 export type ZonePx = { readerId: string; name: string; poly: Px[] };
 
-export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], dimmedReaderIds: Set<string> | null) {
+export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], spotlightReaderIds: Set<string> | null) {
   const m = mats();
   const [cx, cy] = CENTER;
   const b = new Builder(cx, cy);
@@ -357,16 +425,12 @@ export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], dimmedReaderId
 
   // 바닥
   b.prism(plan.outline, -SLAB, SLAB, m.corridor, m.slabSide);
-  for (const z of zones) {
-    const kind = zoneKind(z.name);
-    const floor = dimmedReaderIds && !dimmedReaderIds.has(z.readerId) ? m.dimmed[kind] : m.zone[kind];
-    b.prism(z.poly, 0, 0.6, floor, m.wall).userData.readerId = z.readerId;
-  }
+  for (const z of zones) b.prism(z.poly, 0, 0.6, m.zone[zoneKind(z.name)], m.wall).userData.readerId = z.readerId;
   for (const r of plan.rooms) b.prism(r.poly, 0, 0.6, roomFloor(r), m.wall);
   for (const p of plan.service) b.prism(p, 0, 0.6, m.service, m.wall);
 
   // 걸레받이(벽 밑 띠)와 바닥 테두리
-  const trim = (poly: Px[], skirt: THREE.Material) =>
+  const trim = (poly: Px[], skirt: THREE.Material, readerId?: string) =>
     poly.forEach((a, i) => {
       const c = poly[(i + 1) % poly.length];
       if (Math.hypot(c[0] - a[0], c[1] - a[1]) < 3) return;
@@ -375,10 +439,13 @@ export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], dimmedReaderId
         [a[0] + n[0] * d, a[1] + n[1] * d],
         [c[0] + n[0] * d, c[1] + n[1] * d],
       ];
-      b.seg(...off(PART_T / 2 + 0.5), 0.6, 1.5, 0.7, skirt, false);
-      b.seg(...off(4.2), 0.6, 0.68, 2.2, skirt, false);
+      for (const mesh of [
+        b.seg(...off(PART_T / 2 + 0.5), 0.6, 1.5, 0.7, skirt, false),
+        b.seg(...off(4.2), 0.6, 0.68, 2.2, skirt, false),
+      ])
+        if (mesh) mesh.userData.readerId = readerId;
     });
-  for (const z of zones) trim(z.poly, m.skirting[zoneKind(z.name)]);
+  for (const z of zones) trim(z.poly, m.skirting[zoneKind(z.name)], z.readerId);
   for (const r of plan.rooms) trim(r.poly, roomFloor(r) === m.office ? m.skirting.office : m.skirting.outpatient);
   for (const p of plan.service) trim(p, m.skirting.service);
 
@@ -632,9 +699,17 @@ export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], dimmedReaderId
     if (!label) continue;
     const mesh = floorText(label.lines, floorTextLayout(z.poly, label.lines));
     mesh.position.copy(b.world(label.at[0], label.at[1], 0.65));
+    mesh.userData.readerId = z.readerId;
     names.add(mesh);
   }
   b.root.add(names);
+
+  if (spotlightReaderIds)
+    dimOutsideSpotlight(
+      b.root,
+      zones.filter((z) => spotlightReaderIds.has(z.readerId)),
+      new Set([m.wall, m.wallOuter, m.frame, m.glass, m.doorGlass, m.doorLeaf]),
+    );
 
   const fitPoints = plan.outline.flatMap(([x, y]) => [b.world(x, y, -SLAB), b.world(x, y, WALL + 1)]);
   return { group: b.root, fitPoints };
