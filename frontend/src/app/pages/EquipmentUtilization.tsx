@@ -360,7 +360,7 @@ export default function EquipmentUtilization() {
       return LOGIN_PATH;
     }
   });
-  const [days, setDays] = useState<PeriodDays>(30);
+  const [days, setDays] = useState<PeriodDays>(7);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const { data, error } = useUtilization(days, isAuthorized);
 
