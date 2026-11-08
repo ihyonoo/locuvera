@@ -22,6 +22,7 @@ const LIVE_PAYLOAD = {
     tag('a83f2c9e-6b1d-4e2a-9c77-51f8d20b6a44:2:001', '수액펌프-002', 87),
     tag('a83f2c9e-6b1d-4e2a-9c77-51f8d20b6a44:2:002', '제세동기-001', 15),
     tag('a83f2c9e-6b1d-4e2a-9c77-51f8d20b6a44:2:003', '응급카트-001', null),
+    tag('a83f2c9e-6b1d-4e2a-9c77-51f8d20b6a44:2:004', '시린지펌프-001', 35),
   ],
   readers: [],
   readers_online: 0,
@@ -59,24 +60,46 @@ describe('DeviceStatus beacon battery', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows the reported battery level of each tag', async () => {
+  it('shows the reported battery level of each tag as a percentage', async () => {
     renderPage();
 
-    expect(await screen.findByText('배터리 87%')).toBeInTheDocument();
+    expect(await screen.findByText('87%')).toBeInTheDocument();
   });
 
-  it('asks for a replacement below 20 percent', async () => {
+  it('draws a battery icon filled to the reported level', async () => {
     renderPage();
 
-    const low = await screen.findByText('배터리 15% · 교체 필요');
-    expect(low.querySelector('.staff-led--warn')).not.toBeNull();
-    expect(screen.queryByText(/배터리 87% · 교체 필요/)).not.toBeInTheDocument();
+    const icon = (await screen.findByText('87%')).querySelector('svg.staff-battery');
+    expect(icon).not.toBeNull();
+    // 막대 최대 폭 14의 87%
+    expect(Number(icon?.querySelector('[data-part="level"]')?.getAttribute('width'))).toBeCloseTo(12.18);
   });
 
-  it('leaves the battery line out when no level was reported', async () => {
+  it('colors the level bar green, amber or red by the remaining charge', async () => {
     renderPage();
 
-    await screen.findByText('배터리 87%');
-    expect(screen.getAllByText(/^배터리/)).toHaveLength(2);
+    const levelOf = async (text: string) => (await screen.findByText(text)).querySelector('[data-part="level"]');
+    expect(await levelOf('87%')).toHaveClass('staff-battery__level--high');
+    expect(await levelOf('35%')).toHaveClass('staff-battery__level--mid');
+    expect(await levelOf('15%')).toHaveClass('staff-battery__level--low');
+  });
+
+  it('keeps the word battery for screen readers only', async () => {
+    renderPage();
+
+    await screen.findByText('87%');
+    const words = screen.getAllByText(/배터리/);
+    expect(words).toHaveLength(3);
+    words.forEach((word) => expect(word).toHaveClass('sr-only'));
+  });
+
+  it('asks for a replacement in red to the left of the icon only below 20 percent', async () => {
+    renderPage();
+
+    const alerts = await screen.findAllByText('교체 필요');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveClass('staff-battery-alert');
+    expect(alerts[0].nextElementSibling).toHaveClass('staff-battery');
+    expect(alerts[0].parentElement).toBe(screen.getByText('15%'));
   });
 });

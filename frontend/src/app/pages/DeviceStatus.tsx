@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import StaffShell from '../components/layout/StaffShell';
 import { ToggleSwitch } from '../components/layout/staffControls';
 import ProvenanceDot from '../components/ui/ProvenanceDot';
+import BatteryIcon from '../components/ui/BatteryIcon';
 import { formatIBeaconTag } from '../lib/iBeaconTag';
 import { API_BASE_URL } from '../lib/runtime';
 import { buildAuthHeaders, getStoredAuthSession, LOGIN_PATH } from '../lib/auth';
@@ -205,14 +206,16 @@ export default function DeviceStatus() {
                       {t.is_online ? '감지 중' : '감지 안 됨'}
                     </div>
                     <div className="staff-note mt-1">마지막 수신: {formatSeen(t.last_seen)}</div>
-                    {typeof t.battery_pct !== 'number' ? null : t.battery_pct < LOW_BATTERY_PCT ? (
+                    {typeof t.battery_pct === 'number' ? (
                       <div className="staff-status mt-1">
-                        <span className="staff-led staff-led--warn" />
-                        배터리 {t.battery_pct}% · 교체 필요
+                        {t.battery_pct < LOW_BATTERY_PCT ? (
+                          <span className="staff-battery-alert">교체 필요</span>
+                        ) : null}
+                        <BatteryIcon pct={t.battery_pct} low={t.battery_pct < LOW_BATTERY_PCT} />
+                        <span className="sr-only">배터리 </span>
+                        {t.battery_pct}%
                       </div>
-                    ) : (
-                      <div className="staff-note mt-1">배터리 {t.battery_pct}%</div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               ))
