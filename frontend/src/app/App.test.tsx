@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { storeAuthSession } from './lib/auth';
 import { THEME_STORAGE_KEY } from './lib/theme';
@@ -83,5 +83,31 @@ describe('root path', () => {
     });
     const router = await renderAppAt('/');
     expect(router.state.location.pathname).toBe('/verification');
+  });
+});
+
+describe('exhibit mode', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('starts the automatic tour when opened with ?exhibit=1', async () => {
+    await renderAppAt('/login?exhibit=1');
+    expect(await screen.findByText(/자동 시연 중/)).toBeInTheDocument();
+  });
+
+  it('leaves ordinary visits alone', async () => {
+    await renderAppAt('/login');
+    expect(screen.queryByText(/자동 시연 중/)).not.toBeInTheDocument();
   });
 });
