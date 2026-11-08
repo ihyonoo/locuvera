@@ -30,6 +30,12 @@ SEND_EVERY_SEC = 1.0  # 전송 주기(1초마다 서버로 전송)
 # 태그별 RSSI 임시 저장 버퍼
 # tag_id -> list of (timestamp, rssi)
 tag_samples = {}
+# 태그별 최근 배터리 잔량(%) — 같은 비콘의 Feasycom 프레임에서 읽는다
+tag_battery = {}
+
+# Feasycom 일반 광고 프레임(서비스 데이터 0xFFF0): 모델 1 + 버전 1 + 기능 2 + MAC 6 + 잔량 1
+FEASY_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb"
+FEASY_FRAME_LEN = 11
 
 
 # iBeacon UUID(byte) -> tag_id(문자열) 파싱
@@ -57,6 +63,14 @@ def parse_ibeacon_tag_id(adv) -> str | None:
     return f"{uuid}:{major}:{minor:03d}"
 
 
+# 잔량 바이트는 0x00~0x64(0~100%). 0x65(외부 전원)나 다른 형식은 버린다
+def parse_feasy_battery(adv) -> int | None:
+    frame = adv.service_data.get(FEASY_SERVICE_UUID)
+    if not frame or len(frame) != FEASY_FRAME_LEN or frame[-1] > 100:
+        return None
+    return frame[-1]
+
+
 # 스캔 콜백은 태그 판별과 버퍼 적재만 담당하고, 서버 전송은 별도 루프에서 수행한다.
 def on_scan(device, adv):
     tag_id = parse_ibeacon_tag_id(adv)
@@ -68,6 +82,10 @@ def on_scan(device, adv):
 
     # 해당 태그의 버퍼에 (수신 시각, RSSI 값) 추가
     tag_samples.setdefault(tag_id, []).append((ts, rssi))
+
+    battery = parse_feasy_battery(adv)
+    if battery is not None:
+        tag_battery[tag_id] = battery
 
 
 # 가공 후 서버로 전송 루프
@@ -83,6 +101,7 @@ async def sender_loop():
             # 샘플이 없는 태그는 전송 대상에서 제외
             if not samples:
                 tag_samples.pop(tag_id, None)
+                tag_battery.pop(tag_id, None)
                 continue
             tag_samples[tag_id] = samples
 
@@ -91,14 +110,15 @@ async def sender_loop():
             last_seen = max(t for (t, _) in samples)  # window 내에서 가장 최근 수신 시각
 
             # 서버로 보낼 데이터 구성
-            observations.append(
-                {
-                    "tag_id": tag_id,  # tag_id
-                    "rssi": rssi_med,  # RSSI의 중앙값
-                    "count": len(rssis),  # window 내 샘플 개수(신뢰도)
-                    "last_seen": last_seen + server_time_offset,  # 마지막 수신 시간
-                }
-            )
+            observation = {
+                "tag_id": tag_id,  # tag_id
+                "rssi": rssi_med,  # RSSI의 중앙값
+                "count": len(rssis),  # window 내 샘플 개수(신뢰도)
+                "last_seen": last_seen + server_time_offset,  # 마지막 수신 시간
+            }
+            if tag_id in tag_battery:
+                observation["battery_pct"] = tag_battery[tag_id]  # 배터리 잔량(%)
+            observations.append(observation)
 
         # HTTP 전송
         if observations:  # 전송할 데이터가 있다면

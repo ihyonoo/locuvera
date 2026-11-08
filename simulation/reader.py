@@ -9,6 +9,7 @@ SEND_EVERY_SEC=1.0, rssi=median, count=샘플 수). 한 가지만 다르다 — 
 동작은 달라지지 않고, 평가에서 같은 원시 표본을 다른 설정으로 다시 집계할 수 있다.
 """
 
+import hashlib
 import statistics
 from collections import defaultdict
 from collections.abc import Callable, Sequence
@@ -23,6 +24,15 @@ AGGREGATORS: dict[str, Callable[[Sequence[float]], float]] = {
     "min": min,
 }
 DEFAULT_AGGREGATE = "median"
+
+# 태그 배터리 잔량 하한(%). 장비마다 전지 교체 시기가 달라 잔량이 넓게 퍼진다
+BATTERY_MIN_PCT = 15
+
+
+def tag_battery_pct(tag_id: str) -> int:
+    """태그 ID로 정해지는 고정 잔량(15~100%). 재시작해도 같은 값이다."""
+    digest = hashlib.sha256(tag_id.encode()).digest()
+    return BATTERY_MIN_PCT + int.from_bytes(digest[:2], "big") % (101 - BATTERY_MIN_PCT)
 
 
 class ReaderWindow:
@@ -55,6 +65,7 @@ class ReaderWindow:
                     "rssi": int(self.aggregate([rssi for _, rssi in fresh])),
                     "count": len(fresh),
                     "last_seen": int(max(at for at, _ in fresh)),
+                    "battery_pct": tag_battery_pct(tag_id),
                 }
             )
         return {"reader_id": self.reader_id, "ts": int(now), "observations": observations}

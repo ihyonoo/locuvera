@@ -2068,6 +2068,30 @@ html:has(.staff) [data-slot='select-item'] {
   background: var(--staff-warn);
 }
 
+/* 기기 상태의 배터리 잔량 아이콘: 외곽선은 회색, 막대는 잔량별 초록(50% 이상)·주황·빨강(20% 미만) */
+.staff-battery {
+  flex-shrink: 0;
+  color: var(--staff-muted);
+}
+
+.staff-battery__level--high {
+  fill: var(--staff-ok);
+}
+
+.staff-battery__level--mid {
+  fill: var(--staff-warn);
+}
+
+.staff-battery__level--low {
+  fill: var(--staff-danger);
+}
+
+/* 교체 필요(20% 미만)는 아이콘 왼쪽 빨간 글자 */
+.staff-battery-alert {
+  color: var(--staff-danger-text);
+  font-weight: 600;
+}
+
 .staff-led--off {
   background: #9a9a9a;
 }

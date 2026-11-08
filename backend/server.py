@@ -40,6 +40,7 @@ try:
     from backend.rtls_auth import authenticated_ingest_payload
     from backend.rtls_utils import (
         cache_location_updates,
+        cache_tag_batteries,
         delete_tag_caches,
         filter_registered_tag_ids,
         insert_location_history,
@@ -50,6 +51,7 @@ try:
         load_readers_for_admin,
         load_readers_with_status,
         load_tag_metadata,
+        load_tags_battery,
         load_tags_last_seen,
         mark_tags_seen,
         normalize_nfc_token,
@@ -136,6 +138,7 @@ except ModuleNotFoundError as exc:
     from rtls_auth import authenticated_ingest_payload
     from rtls_utils import (
         cache_location_updates,
+        cache_tag_batteries,
         delete_tag_caches,
         filter_registered_tag_ids,
         insert_location_history,
@@ -146,6 +149,7 @@ except ModuleNotFoundError as exc:
         load_readers_for_admin,
         load_readers_with_status,
         load_tag_metadata,
+        load_tags_battery,
         load_tags_last_seen,
         mark_tags_seen,
         normalize_nfc_token,
@@ -1027,6 +1031,13 @@ def ingest(payload: Annotated[Payload, Depends(authenticated_ingest_payload)]):
         tag_state.update(staged_state)
         cache_location_updates(db_updates, reader_locations=reader_locations)
         mark_tags_seen(registered_tag_ids, now)
+        cache_tag_batteries(
+            {
+                o.tag_id: o.battery_pct
+                for o in payload.observations
+                if o.tag_id in registered_tag_ids and o.battery_pct is not None
+            }
+        )
 
     return {"ok": True}
 
@@ -1800,6 +1811,7 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
     roster_tag_ids = active_tag_ids
     tag_metadata = load_tag_metadata(roster_tag_ids)
     tag_last_seen = load_tags_last_seen(roster_tag_ids)
+    tag_battery = load_tags_battery(roster_tag_ids)
 
     items = []
     for tag_id in roster_tag_ids:
@@ -1833,6 +1845,7 @@ def rtls_live(authorization: str | None = Header(default=None), hide_simulated: 
             "last_seen": effective_seen,
             "is_online": is_online,
             "is_stale": not is_online,
+            "battery_pct": tag_battery.get(tag_id),
         }
         # 모의 장비 숨기기는 응답에서 항목을 빼는 방식이다. 직원에게는 어떤 항목이 모의인지
         # 알려주지 않으므로(아래 is_admin 분기), 필터링을 서버가 대신 해준다.
