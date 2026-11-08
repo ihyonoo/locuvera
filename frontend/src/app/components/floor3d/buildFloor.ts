@@ -486,15 +486,8 @@ export function buildFloorModel(plan: FloorPlan, zones: ZonePx[], spotlightReade
           solid(s0, t - hw);
           s0 = t + hw;
           b.seg(lerp(a, c, t - hw), lerp(a, c, t + hw), DOOR_H, WALL, PART_T, m.wall);
-          // 70° 열린 문짝
-          const hinge = lerp(a, c, t - hw);
-          const dir: Px = [(c[0] - a[0]) / len, (c[1] - a[1]) / len];
-          const ang = 1.2;
-          const end: Px = [
-            hinge[0] + (dir[0] * Math.cos(ang) + n[0] * Math.sin(ang)) * DOOR,
-            hinge[1] + (dir[1] * Math.cos(ang) + n[1] * Math.sin(ang)) * DOOR,
-          ];
-          b.seg(hinge, end, 0.6, DOOR_H - 0.4, 0.8, glassFront ? m.doorGlass : m.doorLeaf);
+          // 닫힌 문짝(벽보다 얇아 문틀 안에 들어가 보인다)
+          b.seg(lerp(a, c, t - hw), lerp(a, c, t + hw), 0.6, DOOR_H, 0.8, glassFront ? m.doorGlass : m.doorLeaf);
         }
         solid(s0, 1);
         b.seg(a, c, WALL, WALL + 0.5, PART_T + 0.3, m.cap, false);
