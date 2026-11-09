@@ -40,15 +40,11 @@ function markupTokens(target: Target): string[] {
 }
 
 describe('EXHIBIT_SCENES', () => {
-  it('tours the four app screens only, with no attack or clip steps', () => {
-    expect(EXHIBIT_SCENES.map((scene) => scene.id)).toEqual(['location', 'verification', 'utilization', 'devices']);
+  it('tours the three app screens only, with no attack or clip steps', () => {
+    expect(EXHIBIT_SCENES.map((scene) => scene.id)).toEqual(['location', 'verification', 'utilization']);
     for (const step of allSteps()) {
       expect(STEP_KINDS).toContain(step.do);
     }
-  });
-
-  it('names the device screen scene 기기 상태 모니터링', () => {
-    expect(EXHIBIT_SCENES.find((scene) => scene.id === 'devices')?.title).toBe('기기 상태 모니터링');
   });
 
   it('tours the floors above 1F, where the map opens, before picking the real equipment', () => {
@@ -61,6 +57,23 @@ describe('EXHIBIT_SCENES', () => {
     const lastFloor = steps.findIndex((step) => 'target' in step && step.target.selector.includes('5층'));
     const pick = steps.findIndex((step) => 'target' in step && step.target.selector === 'button.staff-row');
     expect(lastFloor).toBeLessThan(pick);
+  });
+
+  it('explains in plain words, without on-chain or Merkle jargon', () => {
+    const captions = allSteps().flatMap((step) => (step.do === 'caption' ? [step.text] : []));
+    for (const text of captions) expect(text).not.toMatch(/온체인|머클/);
+  });
+
+  it('keeps the opening caption up through the floor tour, until the name search', () => {
+    const captions = EXHIBIT_SCENES[0].steps.flatMap((step) => (step.do === 'caption' ? [step.text] : []));
+    expect(captions[1]).toBe('장비명 검색');
+  });
+
+  it('keeps the judging caption up while the busiest type opens, with no caption after it', () => {
+    const steps = EXHIBIT_SCENES.find((scene) => scene.id === 'utilization')!.steps;
+    const pick = steps.findIndex((step) => step.do === 'click' && step.target.text === '추가 구매 검토');
+    expect(pick).toBeGreaterThan(-1);
+    expect(steps.slice(pick - 1).some((step) => step.do === 'caption')).toBe(false);
   });
 
   it('explains every scene in a caption before anything moves on screen', () => {

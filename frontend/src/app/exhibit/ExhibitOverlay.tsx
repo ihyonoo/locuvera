@@ -1,4 +1,4 @@
-// 학술제 전시 모드 화면 층. 대본대로 앱 화면 4개를 돌며, '직접 조작하기'를 누르면 손을 뗀다
+// 학술제 전시 모드 화면 층. 대본대로 앱 화면 3개를 돌며, '직접 조작하기'를 누르면 손을 뗀다
 // 자동 시연 중에는 투명한 막이 앱을 덮어 관람객의 마우스·클릭이 대본을 흐트러뜨리지 않는다
 // 시연 영상처럼 장면마다 간지(번호·제목)로 열고, 단계마다 아래 자막으로 설명한다
 // '일시정지'는 지금 화면에 멈춰 세운다(pauseGate)
@@ -282,7 +282,8 @@ export default function ExhibitOverlay({
   };
 
   return (
-    <div className="exhibit-layer">
+    // 이 층의 누름이 document까지 올라가면 Radix가 바깥 누름으로 보고 열린 창(증명서)을 닫는다
+    <div className="exhibit-layer" onPointerDown={(event) => event.stopPropagation()}>
       {auto ? (
         <div
           ref={shield}

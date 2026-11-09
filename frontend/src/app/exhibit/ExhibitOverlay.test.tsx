@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Dialog, DialogContent, DialogTitle } from '../components/ui/dialog';
 import ExhibitOverlay from './ExhibitOverlay';
 import type { Scene } from './player';
 
@@ -60,6 +62,38 @@ function renderOverlay(navigate = vi.fn(), scenes = SCENES) {
     />,
   );
   return { navigate, ensureSession };
+}
+
+// 2번 장면처럼 앱에 증명서 창이 열려 있는 상태
+function CertificateOpen() {
+  const [open, setOpen] = useState(true);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent aria-describedby={undefined}>
+        <DialogTitle>검증 증명서</DialogTitle>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// 실제 앱처럼 증명서와 전시 층을 한 트리에 둔다
+async function renderOverCertificate() {
+  render(
+    <>
+      <CertificateOpen />
+      <ExhibitOverlay
+        navigate={vi.fn()}
+        scenes={SLOW_SCENES}
+        ensureSession={async () => {}}
+        isHumanEvent={fromPerson}
+        idleMs={60_000}
+        cardMs={CARD_MS}
+      />
+    </>,
+  );
+  await screen.findByRole('dialog');
+  // Radix는 바깥 누름 감지를 다음 틱에 붙인다
+  await pass(20);
 }
 
 describe('ExhibitOverlay', () => {
@@ -168,6 +202,26 @@ describe('ExhibitOverlay', () => {
     await pass(150);
 
     expect(fillWidth()).toBe(held);
+  });
+
+  it('keeps an open certificate on screen when the tour is paused', async () => {
+    await renderOverCertificate();
+    // 증명서가 열려 있으면 Radix가 바깥 요소를 화면 낭독기에서 숨긴다
+    const pause = screen.getByRole('button', { name: '일시정지', hidden: true });
+
+    fireEvent.pointerDown(pause);
+    fireEvent.click(pause);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '계속', hidden: true })).toBeInTheDocument();
+  });
+
+  it('keeps an open certificate on screen when a visitor clicks the shield', async () => {
+    await renderOverCertificate();
+
+    fireEvent.pointerDown(screen.getByTestId('exhibit-shield'));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('keeps playing when a person moves the mouse or clicks, and blocks the app underneath', async () => {
