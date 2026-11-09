@@ -13,7 +13,12 @@ export type Step =
   | { do: 'point'; target: Target; optional?: boolean }
   | { do: 'scroll'; target: Target; by: number }
   | { do: 'wait'; ms: number }
-  | { do: 'clip'; src: string };
+  // 화면에 아무것도 하지 않고 대상이 그려질 때까지만 기다린다(간지 뒤에서 로딩을 가린다)
+  | { do: 'ready'; target: Target }
+  // 화면 아래 자막
+  | { do: 'caption'; text: string }
+  // 클립 자막은 클립과 함께 간지 뒤에서 준비한다
+  | { do: 'clip'; src: string; caption?: string };
 
 export type Scene = {
   id: string;
@@ -27,8 +32,13 @@ export type PlayerDeps = {
   navigate: (to: string) => void | Promise<void>;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   pointAt: (el: HTMLElement, signal: AbortSignal) => Promise<void>;
-  playClip: (src: string, signal: AbortSignal) => Promise<void>;
+  playClip: (src: string, signal: AbortSignal, caption?: string) => Promise<void>;
   beforeScene?: (scene: Scene, signal: AbortSignal) => Promise<void>;
+  // 장면 첫머리 간지(번호·제목). 세션 전환과 첫 이동은 그 뒤에서 일어난다
+  sceneStart?: (index: number, scene: Scene, signal: AbortSignal) => Promise<void>;
+  caption?: (text: string, signal: AbortSignal) => void | Promise<void>;
+  // 누르기 직전 커서가 눌리는 효과
+  press?: (signal: AbortSignal) => Promise<void>;
   waitForTarget?: (target: Target, signal: AbortSignal, timeoutMs: number) => Promise<HTMLElement>;
   onScene?: (index: number, scene: Scene) => void;
 };
@@ -38,7 +48,9 @@ const TARGET_TIMEOUT_MS = 15_000;
 // 없을 수도 있는 대상은 짧게만 기다린다
 const OPTIONAL_TARGET_TIMEOUT_MS = 3_000;
 export const CLICK_PAUSE_MS = 600;
-const TYPE_KEY_MS = 90;
+// 글자 사이 간격은 사람처럼 조금씩 다르게
+const TYPE_KEY_MS = 70;
+const TYPE_KEY_JITTER_MS = 50;
 const SCROLL_PAUSE_MS = 900;
 // 장면이 실패하면 잠깐 쉬고 다음 장면으로 — 모든 장면이 곧바로 실패해도 브라우저를 붙잡지 않게
 const FAILED_SCENE_PAUSE_MS = 3_000;
@@ -71,12 +83,19 @@ export async function runExhibit(
         await deps.sleep(step.ms, signal);
         return;
       case 'clip':
-        await deps.playClip(step.src, signal);
+        await deps.playClip(step.src, signal, step.caption);
+        return;
+      case 'caption':
+        await deps.caption?.(step.text, signal);
+        return;
+      case 'ready':
+        await locate(step.target);
         return;
       case 'click': {
         const el = await locate(step.target, step.optional);
         if (!el) return;
         await deps.pointAt(el, signal);
+        await deps.press?.(signal);
         if (signal.aborted) return;
         el.click();
         await deps.sleep(CLICK_PAUSE_MS, signal);
@@ -89,7 +108,7 @@ export async function runExhibit(
         for (let length = 1; length <= step.text.length; length += 1) {
           if (signal.aborted) return;
           setInputValue(el, step.text.slice(0, length));
-          await deps.sleep(TYPE_KEY_MS, signal);
+          await deps.sleep(TYPE_KEY_MS + Math.round(Math.random() * TYPE_KEY_JITTER_MS), signal);
         }
         return;
       }
@@ -113,6 +132,7 @@ export async function runExhibit(
     deps.onScene?.(index, scene);
     if (signal.aborted) return;
     try {
+      await deps.sceneStart?.(index, scene, signal);
       await deps.beforeScene?.(scene, signal);
       for (const step of scene.steps) {
         if (signal.aborted) return;

@@ -37,12 +37,32 @@ function markupTokens(target: Target): string[] {
 }
 
 describe('EXHIBIT_SCENES', () => {
-  it('alternates the app screens with the three security clips', () => {
+  it('shows the app screens first and then the three security clips in a row', () => {
     const kinds = EXHIBIT_SCENES.map((scene) => (scene.steps.some((step) => step.do === 'clip') ? 'clip' : 'app'));
-    expect(kinds).toEqual(['app', 'clip', 'app', 'clip', 'app', 'clip', 'app']);
+    expect(kinds).toEqual(['app', 'app', 'app', 'app', 'clip', 'clip', 'clip']);
 
     const clips = allSteps().flatMap((step) => (step.do === 'clip' ? [step.src] : []));
     expect(clips).toEqual(SECURITY_CLIPS.map((clip) => clip.src));
+  });
+
+  it('tours every floor from 1F to 5F before picking the real equipment', () => {
+    const steps = EXHIBIT_SCENES[0].steps;
+    const floors = steps.flatMap((step) =>
+      step.do === 'click' && step.target.selector.startsWith('button.staff-floor') ? [step.target.selector] : [],
+    );
+    expect(floors).toEqual([1, 2, 3, 4, 5].map((floor) => `button.staff-floor[aria-label="${floor}층"]`));
+
+    const lastFloor = steps.findIndex((step) => 'target' in step && step.target.selector.includes('5층'));
+    const pick = steps.findIndex((step) => 'target' in step && step.target.selector === 'button.staff-row');
+    expect(lastFloor).toBeLessThan(pick);
+  });
+
+  it('explains every scene in a caption before anything moves on screen', () => {
+    for (const scene of EXHIBIT_SCENES) {
+      const first = scene.steps.find((step) => !['go', 'wait', 'ready'].includes(step.do));
+      const captioned = first?.do === 'caption' || (first?.do === 'clip' && Boolean(first.caption));
+      expect(captioned, scene.id).toBe(true);
+    }
   });
 
   it('serves every clip from the exhibit folder', () => {
