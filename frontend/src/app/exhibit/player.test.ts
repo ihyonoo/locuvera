@@ -126,6 +126,23 @@ describe('runExhibit', () => {
     expect(log).toEqual(['card 0 장면', 'enter a', 'go /a', 'caption 설명']);
   });
 
+  it('runs a live attack step through its handler', async () => {
+    const controller = new AbortController();
+    const { log, deps } = makeDeps(controller, 1);
+    deps.runAttack = vi.fn(async (kind: string) => {
+      log.push(`attack ${kind}`);
+    });
+
+    await runExhibit(
+      [{ id: 'live', title: '실연', role: 'staff', steps: [{ do: 'attack', attack: 'forge-ingest' }] }],
+      0,
+      controller.signal,
+      deps,
+    );
+
+    expect(log).toContain('attack forge-ingest');
+  });
+
   it('presses the cursor just before clicking', async () => {
     document.body.innerHTML = '<button id="row"></button>';
     const order: string[] = [];

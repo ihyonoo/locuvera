@@ -3,7 +3,11 @@
 // 시연 영상처럼 장면마다 간지(번호·제목)로 열고, 단계마다 아래 자막으로 설명한다
 // 간지·커서·클립·자막은 앱 위에 겹치며 클릭을 가로채지 않는다
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { getStoredAuthToken } from '../lib/auth';
+import { API_BASE_URL } from '../lib/runtime';
 import '../../styles/exhibit.css';
+import { ATTACK_SOURCE_PATH, CODE_EXCERPTS, highlightLine, markedLines } from './attackCode';
+import { ATTACKS, type Attack, type AttackKind, type TermLine } from './attacks';
 import { type ExhibitMode, createExhibitController } from './controller';
 import { abortError } from './dom';
 import { type HumanEventCheck, watchHumanInput } from './humanInput';
@@ -56,6 +60,7 @@ type ExhibitOverlayProps = {
   isHumanEvent?: HumanEventCheck;
   idleMs?: number;
   cardMs?: number;
+  attacks?: Record<AttackKind, Attack>;
 };
 
 export default function ExhibitOverlay({
@@ -65,6 +70,7 @@ export default function ExhibitOverlay({
   isHumanEvent,
   idleMs = IDLE_MS,
   cardMs = CARD_MS,
+  attacks = ATTACKS,
 }: ExhibitOverlayProps) {
   const [mode, setMode] = useState<ExhibitMode>('auto');
   const [card, setCard] = useState<Card | null>(null);
@@ -72,13 +78,18 @@ export default function ExhibitOverlay({
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [pressed, setPressed] = useState(false);
   const [clip, setClip] = useState<string | null>(null);
+  const [terminal, setTerminal] = useState<TermLine[] | null>(null);
+  const terminalBody = useRef<HTMLDivElement>(null);
+  // 실연 옆 코드 창: 어느 공격의 코드인지와 지금 강조할 줄
+  const [codeView, setCodeView] = useState<{ attack: AttackKind; marked: number[] } | null>(null);
+  const codeBody = useRef<HTMLDivElement>(null);
   const finishClip = useRef<(() => void) | null>(null);
   const tourControls = useRef({ takeOver: () => {}, resume: () => {} });
   const shield = useRef<HTMLDivElement>(null);
   const [pointerStill, setPointerStill] = useState(true);
   const pointerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 순환은 화면 수명 동안 한 번만 만든다 — 첫 렌더의 값으로 고정
-  const setup = useRef({ navigate, scenes, ensureSession, isHumanEvent, idleMs, cardMs });
+  const setup = useRef({ navigate, scenes, ensureSession, isHumanEvent, idleMs, cardMs, attacks });
 
   useEffect(() => {
     const config = setup.current;
@@ -101,6 +112,8 @@ export default function ExhibitOverlay({
       setCard({ no: String(index + 1).padStart(2, '0'), title: scene.title, on: true });
       await sleep(fadeMs, signal);
       setClip(null);
+      setTerminal(null);
+      setCodeView(null);
       await sleep(Math.max(0, config.cardMs - fadeMs), signal);
     };
 
@@ -149,6 +162,21 @@ export default function ExhibitOverlay({
     };
 
     // 클립을 간지 뒤에 먼저 띄우고 간지를 걷는다. 끝나면 마지막 화면에 멈춘 채 다음 간지를 기다린다
+    // 실연 패널을 간지 뒤에 먼저 띄우고 걷은 뒤, 서버 응답이 올 때마다 한 줄씩 그린다
+    const runAttack = async (kind: AttackKind, signal: AbortSignal) => {
+      setTerminal([]);
+      setCodeView({ attack: kind, marked: [] });
+      await reveal(signal);
+      await config.attacks[kind]({
+        api: API_BASE_URL,
+        token: getStoredAuthToken(),
+        print: (line) => setTerminal((prev) => (prev ? [...prev, line] : prev)),
+        mark: (mark) => setCodeView((prev) => (prev ? { ...prev, marked: markedLines(mark) } : prev)),
+        pause: (ms) => sleep(ms, signal),
+        signal,
+      });
+    };
+
     const playClip = (src: string, signal: AbortSignal, text?: string) =>
       new Promise<void>((resolve) => {
         const finish = () => {
@@ -177,6 +205,8 @@ export default function ExhibitOverlay({
           setCaption('');
           setCursor(null);
           setClip(null);
+          setTerminal(null);
+          setCodeView(null);
         }
       },
       run: (startAt, signal, onScene) =>
@@ -186,6 +216,7 @@ export default function ExhibitOverlay({
           pointAt,
           press,
           playClip,
+          runAttack,
           sceneStart,
           caption: showCaption,
           beforeScene: async (scene) => {
@@ -221,6 +252,23 @@ export default function ExhibitOverlay({
   }, [auto]);
 
   useEffect(() => () => clearTimeout(pointerTimer.current), []);
+
+  useEffect(() => {
+    const body = terminalBody.current;
+    if (body) body.scrollTop = body.scrollHeight;
+  }, [terminal]);
+
+  // 강조한 줄이 코드 창 가운데에 오게 굴린다
+  useEffect(() => {
+    const body = codeBody.current;
+    const first = codeView?.marked[0];
+    if (!body || !first) return;
+    const line = body.querySelector<HTMLElement>(`[data-line="${first}"]`);
+    if (!line) return;
+    const top = line.offsetTop - body.clientHeight / 2 + line.offsetHeight * 2;
+    if (typeof body.scrollTo === 'function') body.scrollTo({ top, behavior: 'smooth' });
+    else body.scrollTop = top;
+  }, [codeView]);
 
   const showPointer = () => {
     setPointerStill(false);
@@ -258,7 +306,60 @@ export default function ExhibitOverlay({
           <div className="exhibit-card__title">{card.title}</div>
         </div>
       ) : null}
-      {auto && cursor && !clip ? (
+      {auto && terminal ? (
+        <div className="exhibit-term-stage">
+          <div className="exhibit-live">
+            <div data-testid="exhibit-terminal" className="exhibit-term">
+              <div className="exhibit-term__bar" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <span>운영 서버 실시간 요청 · mediledger.xyz</span>
+              </div>
+              <div ref={terminalBody} className="exhibit-term__body">
+                {terminal.map((line, index) => (
+                  <div key={index} className={`exhibit-term__line exhibit-term__line--${line.tone ?? 'plain'}`}>
+                    {line.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {codeView ? (
+              <div data-testid="exhibit-code" className="exhibit-term exhibit-code">
+                <div className="exhibit-term__bar" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <span>{ATTACK_SOURCE_PATH}</span>
+                </div>
+                <div ref={codeBody} className="exhibit-code__body">
+                  {CODE_EXCERPTS[codeView.attack].lines.map((source, index) => {
+                    const lineNo = CODE_EXCERPTS[codeView.attack].firstLine + index;
+                    const on = codeView.marked.includes(lineNo);
+                    return (
+                      <div
+                        key={lineNo}
+                        data-line={lineNo}
+                        className={on ? 'exhibit-code__line exhibit-code__line--on' : 'exhibit-code__line'}
+                      >
+                        <span className="exhibit-code__no">{lineNo}</span>
+                        <span className="exhibit-code__src">
+                          {highlightLine(source).map((token, i) => (
+                            <span key={i} className={token.kind ? `exhibit-code__${token.kind}` : undefined}>
+                              {token.text}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {auto && cursor && !clip && !terminal ? (
         <div
           data-testid="exhibit-cursor"
           className={pressed ? 'exhibit-cursor exhibit-cursor--press' : 'exhibit-cursor'}

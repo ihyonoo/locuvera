@@ -1,4 +1,4 @@
-// 학술제 전시 순환 대본. 앱 화면 4개를 돈 뒤 보안 실연 클립 3개를 맨 뒤에 이어서 재생한다
+// 학술제 전시 순환 대본. 앱 화면 4개를 돈 뒤 보안 실연(라이브 2개, 변조 영상 1개)을 맨 뒤에 이어서 보여 준다
 // 읽기 전용 — 대여·반납·저장 단추는 누르지 않는다(scenes.test.ts가 확인)
 // 화면 문구를 바꾸면 여기 대상도 함께 고친다
 import type { Scene, Step } from './player';
@@ -7,20 +7,8 @@ import type { Scene, Step } from './player';
 const REAL_EQUIPMENT = '수액펌프-001';
 const STAGED_USAGE = '#3251';
 
-// tools/exhibit/ 스크립트를 운영 서버에 실제로 실행해 찍은 영상
+// 변조 실연은 운영 DB를 바꿔야 해 웹에서 할 수 없다 — tools/exhibit/tamper_demo를 운영에 실제로 실행해 찍은 영상
 export const SECURITY_CLIPS = [
-  {
-    id: 'forge-ingest',
-    title: '측위 보고 위조 차단',
-    src: '/exhibit/forge-ingest.mp4',
-    caption: '운영 서버에 위조 측위 보고 실제 전송\n서명 없음·위조 서명·미등록 리더 모두 거부',
-  },
-  {
-    id: 'replay-nfc',
-    title: 'NFC 태그 복제·재전송 차단',
-    src: '/exhibit/replay-nfc.mp4',
-    caption: '이미 사용된 NFC 태깅 URL 재전송·카운터 위조\n칩 카운터·CMAC 검증으로 거부, 서버 감사 기록 저장',
-  },
   {
     id: 'tamper-detect',
     title: '사용 이력 변조 탐지',
@@ -36,7 +24,8 @@ const clipScene = (clip: (typeof SECURITY_CLIPS)[number]): Scene => ({
 });
 
 const CERTIFICATE_BODY = { selector: '[data-slot="dialog-body"]' };
-const FLOORS = [1, 2, 3, 4, 5];
+// 지도는 1층으로 열린다
+const FLOORS = [2, 3, 4, 5];
 
 export const EXHIBIT_SCENES: Scene[] = [
   {
@@ -50,7 +39,7 @@ export const EXHIBIT_SCENES: Scene[] = [
       { do: 'wait', ms: 1500 },
       { do: 'caption', text: '병원 도면 위 장비 위치 실시간 표시\n초록: 사용 가능 · 빨강: 대여 중' },
       { do: 'wait', ms: 3000 },
-      // 시연 영상처럼 1층부터 5층까지 층별 구역·장비 현황을 훑는다
+      // 시연 영상처럼 1층(처음 화면)부터 5층까지 층별 구역·장비 현황을 훑는다
       { do: 'caption', text: '층별 구역·장비 현황 조회' },
       ...FLOORS.flatMap((floor): Step[] => [
         { do: 'click', target: { selector: `button.staff-floor[aria-label="${floor}층"]` } },
@@ -128,12 +117,29 @@ export const EXHIBIT_SCENES: Scene[] = [
       // 잔량 20% 미만 태그의 교체 알림
       { do: 'caption', text: '비콘 배터리 잔량 표시 · 20% 미만 시 교체 알림' },
       { do: 'point', target: { selector: '.staff-battery-alert' }, optional: true },
-      { do: 'wait', ms: 3500 },
-      // 실물 리더 2대와 실물 비콘만 남긴다
-      { do: 'caption', text: '실물 리더 2대·실물 비콘 상태만 보기' },
-      { do: 'click', target: { selector: 'label.staff-switch', text: '시뮬레이션 데이터 숨기기' } },
-      { do: 'wait', ms: 1500 },
-      { do: 'point', target: { selector: '.staff-battery' }, optional: true },
+      { do: 'wait', ms: 5000 },
+    ],
+  },
+  // 운영 서버로 실제 요청을 보내 거부되는 결과를 그 자리에서 보여 준다(attacks.ts)
+  {
+    id: 'forge-ingest',
+    title: '측위 보고 위조 차단',
+    role: 'staff',
+    steps: [
+      { do: 'go', to: '/equipment' },
+      { do: 'caption', text: '운영 서버로 위조 측위 보고 실시간 전송\n서명 없음·위조 서명·미등록 리더 모두 거부' },
+      { do: 'attack', attack: 'forge-ingest' },
+      { do: 'wait', ms: 5000 },
+    ],
+  },
+  {
+    id: 'replay-nfc',
+    title: 'NFC 태그 복제·재전송 차단',
+    role: 'staff',
+    steps: [
+      { do: 'go', to: '/equipment' },
+      { do: 'caption', text: '이미 사용된 NFC 태깅 URL 실시간 재전송·카운터 위조\n칩 카운터·CMAC 검증으로 거부' },
+      { do: 'attack', attack: 'replay-nfc' },
       { do: 'wait', ms: 5000 },
     ],
   },

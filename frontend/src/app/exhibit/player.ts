@@ -1,5 +1,6 @@
 // 전시 대본 재생기. 장면을 차례로 돌고 마지막 다음에는 처음으로 돌아간다
 // signal이 끊기면(사람 개입) 하던 단계에서 바로 멈춘다
+import type { AttackKind } from './attacks';
 import { type Target, TargetNotFoundError, scrollTargetBy, setInputValue, waitForTarget } from './dom';
 
 export type { Target } from './dom';
@@ -18,7 +19,9 @@ export type Step =
   // 화면 아래 자막
   | { do: 'caption'; text: string }
   // 클립 자막은 클립과 함께 간지 뒤에서 준비한다
-  | { do: 'clip'; src: string; caption?: string };
+  | { do: 'clip'; src: string; caption?: string }
+  // 운영 서버로 실제 공격 요청을 보내고 결과를 터미널 패널에 그린다(attacks.ts)
+  | { do: 'attack'; attack: AttackKind };
 
 export type Scene = {
   id: string;
@@ -33,6 +36,7 @@ export type PlayerDeps = {
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   pointAt: (el: HTMLElement, signal: AbortSignal) => Promise<void>;
   playClip: (src: string, signal: AbortSignal, caption?: string) => Promise<void>;
+  runAttack?: (attack: AttackKind, signal: AbortSignal) => Promise<void>;
   beforeScene?: (scene: Scene, signal: AbortSignal) => Promise<void>;
   // 장면 첫머리 간지(번호·제목). 세션 전환과 첫 이동은 그 뒤에서 일어난다
   sceneStart?: (index: number, scene: Scene, signal: AbortSignal) => Promise<void>;
@@ -84,6 +88,9 @@ export async function runExhibit(
         return;
       case 'clip':
         await deps.playClip(step.src, signal, step.caption);
+        return;
+      case 'attack':
+        await deps.runAttack?.(step.attack, signal);
         return;
       case 'caption':
         await deps.caption?.(step.text, signal);
