@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { router } from '../routes';
 import type { Step, Target } from './player';
-import { EXHIBIT_SCENES, SECURITY_CLIPS } from './scenes';
+import { EXHIBIT_SCENES } from './scenes';
 
 // 대본이 기대는 화면 마크업이 아직 소스에 있는지 본다 — 화면 문구를 바꾸면 여기서 먼저 깨진다
 const SOURCES = import.meta.glob(
@@ -23,6 +23,9 @@ const DATA_TEXTS = new Set(['수액펌프-001', '#3251']);
 // 쓰기 동작으로 이어지는 단추 글자
 const WRITE_WORDS = /대여|반납|저장|승인|거절|삭제|인쇄|로그아웃|해제|탈퇴|바인딩/;
 
+// 대본이 쓰는 단계 종류 — 보안 실연은 터미널로 옮겨 attack·clip 단계가 없다
+const STEP_KINDS: Step['do'][] = ['go', 'click', 'type', 'point', 'scroll', 'wait', 'ready', 'caption'];
+
 const allSteps = (): Step[] => EXHIBIT_SCENES.flatMap((scene) => scene.steps);
 
 function targetsOf(step: Step): Target[] {
@@ -37,21 +40,15 @@ function markupTokens(target: Target): string[] {
 }
 
 describe('EXHIBIT_SCENES', () => {
-  it('shows the app screens first, then the live attacks and the tamper clip', () => {
-    const security = EXHIBIT_SCENES.map((scene) =>
-      scene.steps.flatMap((step) =>
-        step.do === 'attack' ? [`live ${step.attack}`] : step.do === 'clip' ? [`clip ${step.src}`] : [],
-      ),
-    );
-    expect(security).toEqual([
-      [],
-      [],
-      [],
-      [],
-      ['live forge-ingest'],
-      ['live replay-nfc'],
-      SECURITY_CLIPS.map((clip) => `clip ${clip.src}`),
-    ]);
+  it('tours the four app screens only, with no attack or clip steps', () => {
+    expect(EXHIBIT_SCENES.map((scene) => scene.id)).toEqual(['location', 'verification', 'utilization', 'devices']);
+    for (const step of allSteps()) {
+      expect(STEP_KINDS).toContain(step.do);
+    }
+  });
+
+  it('names the device screen scene 기기 상태 모니터링', () => {
+    expect(EXHIBIT_SCENES.find((scene) => scene.id === 'devices')?.title).toBe('기기 상태 모니터링');
   });
 
   it('tours the floors above 1F, where the map opens, before picking the real equipment', () => {
@@ -69,15 +66,7 @@ describe('EXHIBIT_SCENES', () => {
   it('explains every scene in a caption before anything moves on screen', () => {
     for (const scene of EXHIBIT_SCENES) {
       const first = scene.steps.find((step) => !['go', 'wait', 'ready'].includes(step.do));
-      const captioned = first?.do === 'caption' || (first?.do === 'clip' && Boolean(first.caption));
-      // 라이브 실연은 자막을 먼저 띄우고 요청을 보낸다
-      expect(captioned, scene.id).toBe(true);
-    }
-  });
-
-  it('serves every clip from the exhibit folder', () => {
-    for (const clip of SECURITY_CLIPS) {
-      expect(clip.src).toMatch(/^\/exhibit\/[\w-]+\.mp4$/);
+      expect(first?.do, scene.id).toBe('caption');
     }
   });
 

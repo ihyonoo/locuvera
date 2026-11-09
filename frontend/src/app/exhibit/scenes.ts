@@ -1,4 +1,5 @@
-// 학술제 전시 순환 대본. 앱 화면 4개를 돈 뒤 보안 실연(라이브 2개, 변조 영상 1개)을 맨 뒤에 이어서 보여 준다
+// 학술제 전시 순환 대본. 앱 화면 4개를 자동으로 돈다
+// 보안 실연(위조·재전송·변조)은 발표자가 터미널(tools/exhibit)에서 직접 보여 준다 — 앱 대본에는 없다
 // 읽기 전용 — 대여·반납·저장 단추는 누르지 않는다(scenes.test.ts가 확인)
 // 화면 문구를 바꾸면 여기 대상도 함께 고친다
 import type { Scene, Step } from './player';
@@ -6,22 +7,6 @@ import type { Scene, Step } from './player';
 // 실물 비콘을 단 장비와 그 연출 기록(설계 메모 2026-11-09-exhibit-demo-mode)
 const REAL_EQUIPMENT = '수액펌프-001';
 const STAGED_USAGE = '#3251';
-
-// 변조 실연은 운영 DB를 바꿔야 해 웹에서 할 수 없다 — tools/exhibit/tamper_demo를 운영에 실제로 실행해 찍은 영상
-export const SECURITY_CLIPS = [
-  {
-    id: 'tamper-detect',
-    title: '사용 이력 변조 탐지',
-    src: '/exhibit/tamper-detect.mp4',
-    caption: 'DB 사용 이력의 반납 시각 변조\n블록체인 기록과 대조해 즉시 탐지 후 원상 복구',
-  },
-] as const;
-
-const clipScene = (clip: (typeof SECURITY_CLIPS)[number]): Scene => ({
-  id: clip.id,
-  title: clip.title,
-  steps: [{ do: 'clip', src: clip.src, caption: clip.caption }],
-});
 
 const CERTIFICATE_BODY = { selector: '[data-slot="dialog-body"]' };
 // 지도는 1층으로 열린다
@@ -106,7 +91,7 @@ export const EXHIBIT_SCENES: Scene[] = [
   },
   {
     id: 'devices',
-    title: '리더·태그 상태 모니터링',
+    title: '기기 상태 모니터링',
     role: 'admin',
     steps: [
       { do: 'go', to: '/admin/devices' },
@@ -120,28 +105,4 @@ export const EXHIBIT_SCENES: Scene[] = [
       { do: 'wait', ms: 5000 },
     ],
   },
-  // 운영 서버로 실제 요청을 보내 거부되는 결과를 그 자리에서 보여 준다(attacks.ts)
-  {
-    id: 'forge-ingest',
-    title: '측위 보고 위조 차단',
-    role: 'staff',
-    steps: [
-      { do: 'go', to: '/equipment' },
-      { do: 'caption', text: '운영 서버로 위조 측위 보고 실시간 전송\n서명 없음·위조 서명·미등록 리더 모두 거부' },
-      { do: 'attack', attack: 'forge-ingest' },
-      { do: 'wait', ms: 5000 },
-    ],
-  },
-  {
-    id: 'replay-nfc',
-    title: 'NFC 태그 복제·재전송 차단',
-    role: 'staff',
-    steps: [
-      { do: 'go', to: '/equipment' },
-      { do: 'caption', text: '이미 사용된 NFC 태깅 URL 실시간 재전송·카운터 위조\n칩 카운터·CMAC 검증으로 거부' },
-      { do: 'attack', attack: 'replay-nfc' },
-      { do: 'wait', ms: 5000 },
-    ],
-  },
-  ...SECURITY_CLIPS.map(clipScene),
 ];
