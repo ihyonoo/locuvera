@@ -1,4 +1,4 @@
-// 학술제 전시 순환 대본. 앱 화면 4개를 자동으로 돈다
+// 학술제 전시 순환 대본. 앱 화면 3개를 자동으로 돈다
 // 보안 실연(위조·재전송·변조)은 발표자가 터미널(tools/exhibit)에서 직접 보여 준다 — 앱 대본에는 없다
 // 읽기 전용 — 대여·반납·저장 단추는 누르지 않는다(scenes.test.ts가 확인)
 // 화면 문구를 바꾸면 여기 대상도 함께 고친다
@@ -24,8 +24,7 @@ export const EXHIBIT_SCENES: Scene[] = [
       { do: 'wait', ms: 1500 },
       { do: 'caption', text: '병원 도면 위 장비 위치 실시간 표시\n초록: 사용 가능 · 빨강: 대여 중' },
       { do: 'wait', ms: 3000 },
-      // 시연 영상처럼 1층(처음 화면)부터 5층까지 층별 구역·장비 현황을 훑는다
-      { do: 'caption', text: '층별 구역·장비 현황 조회' },
+      // 시연 영상처럼 1층(처음 화면)부터 5층까지 층별 구역·장비 현황을 훑는다 — 첫 자막을 그대로 둔다
       ...FLOORS.flatMap((floor): Step[] => [
         { do: 'click', target: { selector: `button.staff-floor[aria-label="${floor}층"]` } },
         { do: 'wait', ms: 1600 },
@@ -58,7 +57,7 @@ export const EXHIBIT_SCENES: Scene[] = [
       { do: 'caption', text: '이력마다 블록체인 기록과 대조한 무결성 검증 결과 표시' },
       { do: 'point', target: { selector: 'button.staff-usage-row', text: STAGED_USAGE } },
       { do: 'wait', ms: 3000 },
-      { do: 'caption', text: '검증 증명서: 사용 기록·온체인 원문·머클 루트 검증 결과' },
+      { do: 'caption', text: '검증 증명서: 사용 기록과 블록체인 기록의 일치 여부 확인' },
       { do: 'click', target: { selector: 'button.staff-usage-row', text: STAGED_USAGE } },
       { do: 'wait', ms: 2500 },
       { do: 'scroll', target: CERTIFICATE_BODY, by: 420 },
@@ -78,31 +77,14 @@ export const EXHIBIT_SCENES: Scene[] = [
     steps: [
       { do: 'go', to: '/admin/utilization' },
       { do: 'ready', target: { selector: 'button.staff-util-row' } },
-      { do: 'caption', text: '최근 7일 사용 이력 기준 장비 종류별 가동률 집계' },
+      { do: 'caption', text: '장비 사용 데이터 기반 장비 가동률 분석 기능' },
       { do: 'point', target: { selector: 'button.staff-util-row' } },
       { do: 'wait', ms: 3000 },
       { do: 'caption', text: '하루 중 가장 바쁜 1시간의 가동률로 판정\n80% 이상: 추가 구매 검토 · 20% 미만: 유휴' },
       { do: 'wait', ms: 3500 },
-      // 7일 동안 추가 구매 검토 종류가 없으면 전체 장비 그대로 둔다
-      { do: 'caption', text: '추가 구매 검토 종류 선택: 평일·주말 시간대별 가동률' },
+      // 판정 자막을 그대로 둔 채 추가 구매 검토 종류를 연다. 7일 동안 그런 종류가 없으면 전체 장비 그대로 둔다
       { do: 'click', target: { selector: 'button.staff-util-row', text: '추가 구매 검토' }, optional: true },
       { do: 'wait', ms: 7000 },
-    ],
-  },
-  {
-    id: 'devices',
-    title: '기기 상태 모니터링',
-    role: 'admin',
-    steps: [
-      { do: 'go', to: '/admin/devices' },
-      { do: 'ready', target: { selector: 'h2.staff-panel__title', text: '리더' } },
-      { do: 'caption', text: '리더 연결·태그 수신 상태 실시간 감시' },
-      { do: 'point', target: { selector: 'h2.staff-panel__title', text: '리더' } },
-      { do: 'wait', ms: 2500 },
-      // 잔량 20% 미만 태그의 교체 알림
-      { do: 'caption', text: '비콘 배터리 잔량 표시 · 20% 미만 시 교체 알림' },
-      { do: 'point', target: { selector: '.staff-battery-alert' }, optional: true },
-      { do: 'wait', ms: 5000 },
     ],
   },
 ];
