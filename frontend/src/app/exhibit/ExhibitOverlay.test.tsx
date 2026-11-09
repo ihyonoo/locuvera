@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ExhibitOverlay from './ExhibitOverlay';
 import type { Scene } from './player';
@@ -28,8 +28,24 @@ const SCENES: Scene[] = [
   },
 ];
 
+// 진행도바가 한 단계 안에서 움직이는지 보려고 긴 대기 하나만 둔다
+const SLOW_SCENES: Scene[] = [
+  {
+    id: 'slow',
+    title: '느린 장면',
+    role: 'admin',
+    steps: [
+      { do: 'caption', text: '천천히 차오름' },
+      { do: 'wait', ms: 10_000 },
+    ],
+  },
+];
+
 // 간지는 테스트에서 짧게 띄운다
 const CARD_MS = 20;
+
+const fillWidth = () => parseFloat(screen.getAllByTestId('exhibit-progress-fill')[0].style.width);
+const pass = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function renderOverlay(navigate = vi.fn(), scenes = SCENES) {
   const ensureSession = vi.fn(async () => {});
@@ -83,12 +99,75 @@ describe('ExhibitOverlay', () => {
     expect(screen.getByRole('button', { name: '일시정지' })).toBeInTheDocument();
   });
 
-  it('shows a progress bar for the current scene out of the total', async () => {
+  it('splits the progress bar into one section per scene and marks the one playing', async () => {
     renderOverlay();
 
-    const bar = await screen.findByTestId('exhibit-progress');
-    expect(bar).toHaveAttribute('aria-valuemax', String(SCENES.length));
-    expect(bar).toHaveAttribute('aria-valuenow', '1');
+    const sections = within(await screen.findByTestId('exhibit-progress')).getAllByRole('button');
+    expect(sections.map((section) => section.textContent)).toEqual(['01 기기 상태', '02 장비 가동률 분석']);
+    expect(sections[0]).toHaveAttribute('aria-current', 'step');
+    expect(sections[1]).not.toHaveAttribute('aria-current');
+  });
+
+  it('jumps to the pressed section, starting from its title card', async () => {
+    const { navigate } = renderOverlay();
+    await screen.findByTestId('exhibit-caption');
+
+    fireEvent.click(screen.getByRole('button', { name: '02 장비 가동률 분석' }));
+
+    const card = screen.getByTestId('exhibit-card');
+    expect(card).toHaveClass('exhibit-card--on');
+    expect(card).toHaveTextContent('장비 가동률 분석');
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith('/admin/utilization'));
+  });
+
+  it('lifts the pause and keeps playing when a section is pressed while paused', async () => {
+    renderOverlay();
+    await screen.findByTestId('exhibit-caption');
+    fireEvent.click(screen.getByRole('button', { name: '일시정지' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '02 장비 가동률 분석' }));
+
+    expect(screen.getByRole('button', { name: '일시정지' })).toBeInTheDocument();
+    // 2번 장면을 마치고 1번 간지로 넘어가면 멈춤 문을 지난 것이다
+    await vi.waitFor(() => expect(screen.getByTestId('exhibit-card')).toHaveTextContent('01'));
+  });
+
+  it('closes an open dialog before replaying a scene, since the same page is not redrawn', async () => {
+    renderOverlay();
+    await screen.findByTestId('exhibit-caption');
+    const escapes: string[] = [];
+    const listen = (event: KeyboardEvent) => escapes.push(event.key);
+    document.addEventListener('keydown', listen);
+
+    fireEvent.click(screen.getByRole('button', { name: '01 기기 상태' }));
+    document.removeEventListener('keydown', listen);
+
+    expect(escapes).toContain('Escape');
+  });
+
+  it('fills the progress bar little by little while a step plays', async () => {
+    renderOverlay(vi.fn(), SLOW_SCENES);
+    await screen.findByTestId('exhibit-caption');
+
+    const first = await vi.waitFor(() => {
+      const width = fillWidth();
+      expect(width).toBeGreaterThan(0);
+      return width;
+    });
+    await vi.waitFor(() => expect(fillWidth()).toBeGreaterThan(first));
+    expect(fillWidth()).toBeLessThan(100);
+  });
+
+  it('holds the progress bar still while paused', async () => {
+    renderOverlay(vi.fn(), SLOW_SCENES);
+    await screen.findByTestId('exhibit-caption');
+    await vi.waitFor(() => expect(fillWidth()).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: '일시정지' }));
+    const held = fillWidth();
+    await pass(150);
+
+    expect(fillWidth()).toBe(held);
   });
 
   it('keeps playing when a person moves the mouse or clicks, and blocks the app underneath', async () => {

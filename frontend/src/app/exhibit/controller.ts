@@ -50,6 +50,12 @@ export function createExhibitController({ sceneCount, idleMs, run, onMode }: Con
       if (tour) return;
       resumeFromNext();
     },
+    // 자동 시연 중 진행도바에서 고른 장면으로 — 그 장면 간지부터 다시 튼다
+    jumpTo(index: number) {
+      if (!tour) return;
+      tour.abort();
+      startTour(index);
+    },
     stop() {
       clearTimeout(idleTimer);
       tour?.abort();
