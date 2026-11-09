@@ -1,4 +1,4 @@
-/* 학술제 전시 모드 층(exhibit/ExhibitOverlay.tsx) — 앱 위에 겹치고 클릭은 그대로 아래로 보낸다 */
+/* 학술제 전시 모드 층(exhibit/ExhibitOverlay.tsx) — 앱 위에 겹친다. 자동 시연 중에는 막이 클릭을 받아 앱에 닿지 않게 한다 */
 /* 간지·자막·커서는 시연 영상 무대(1536×864 기준)를 1920 폭에 맞춰 1.25배 한 크기다 */
 .exhibit-layer {
   position: fixed;
@@ -7,6 +7,43 @@
   pointer-events: none;
   font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* 자동 시연 중 앱을 덮는 투명한 막. 실제 포인터는 움직일 때만 보인다 */
+.exhibit-shield {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.exhibit-shield--still {
+  cursor: none;
+}
+
+/* 자동 시연을 멈추는 유일한 수단 */
+.exhibit-takeover {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(17 24 28 / 0.72);
+  color: #f3f4f4;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.exhibit-takeover:hover {
+  background: rgb(17 24 28 / 0.9);
+}
+
+.exhibit-takeover:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
 }
 
 /* 페이드 시간은 FADE_MS와 같다 */
