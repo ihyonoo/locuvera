@@ -62,25 +62,88 @@
   outline-offset: 2px;
 }
 
-/* 진행도바 — 맨 아래 가운데, 적당한 폭의 얇은 바. 지금 장면 수만큼 좌→우로 채운다 */
+/* 진행도바 — 맨 아래 가운데, 적당한 폭의 얇은 바. 한 바퀴를 장면 칸으로 나눠 계속 차오른다(채움 폭은 ExhibitOverlay가 매 프레임 쓴다) */
+/* 칸은 단추다: 누르면 그 장면으로 가고, 올리면 바가 조금 두꺼워지며 칸 위에 장면 번호·제목이 뜬다 */
 .exhibit-progress {
   position: absolute;
-  bottom: 12px;
+  bottom: 4px;
   left: 50%;
+  display: flex;
+  gap: 3px;
   width: min(360px, calc(100vw - 48px));
+  transform: translateX(-50%);
+}
+
+/* 누르는 영역은 바보다 위아래로 넓다 — 바 자체는 아래에서 12px */
+.exhibit-progress__section {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  height: 20px;
+  padding: 0 0 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.exhibit-progress__section:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.exhibit-progress__track {
+  display: block;
+  width: 100%;
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.18);
-  transform: translateX(-50%);
+  /* 중간 회색이라 밝은 업무 화면·어두운 간지 어디서나 칸과 구분선이 보인다 */
+  background: rgb(128 128 128 / 0.45);
+  transition:
+    height 160ms ease,
+    background-color 160ms ease;
+}
+
+.exhibit-progress:hover .exhibit-progress__track {
+  height: 6px;
+}
+
+.exhibit-progress__section:hover .exhibit-progress__track {
+  background: rgb(128 128 128 / 0.7);
 }
 
 .exhibit-progress__fill {
   display: block;
+  width: 0;
   height: 100%;
   border-radius: inherit;
   background: #2dd4bf;
-  transition: width 400ms ease;
+}
+
+.exhibit-progress__tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgb(17 24 28 / 0.9);
+  color: #f3f4f4;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 160ms ease;
+}
+
+.exhibit-progress__section:hover .exhibit-progress__tip,
+.exhibit-progress__section:focus-visible .exhibit-progress__tip {
+  opacity: 1;
 }
 
 .exhibit-card {
@@ -248,7 +311,8 @@
     transition: none;
   }
 
-  .exhibit-progress__fill {
+  .exhibit-progress__track,
+  .exhibit-progress__tip {
     transition: none;
   }
 

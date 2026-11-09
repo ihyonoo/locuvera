@@ -1,7 +1,8 @@
 // 학술제 전시 모드 화면 층. 대본대로 앱 화면 4개를 돌며, '직접 조작하기'를 누르면 손을 뗀다
 // 자동 시연 중에는 투명한 막이 앱을 덮어 관람객의 마우스·클릭이 대본을 흐트러뜨리지 않는다
 // 시연 영상처럼 장면마다 간지(번호·제목)로 열고, 단계마다 아래 자막으로 설명한다
-// '일시정지'는 지금 화면에 멈춰 세우고(pauseGate), 아래 진행도바가 몇 번째 장면인지 보여 준다
+// '일시정지'는 지금 화면에 멈춰 세운다(pauseGate)
+// 아래 진행도바는 한 바퀴를 장면 칸으로 나눠 계속 차오르고, 칸을 누르면 그 장면으로 간다(progress)
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import '../../styles/exhibit.css';
 import { type ExhibitMode, createExhibitController } from './controller';
@@ -9,6 +10,7 @@ import { abortError } from './dom';
 import { type HumanEventCheck, watchHumanInput } from './humanInput';
 import { type PauseGate, createPauseGate } from './pauseGate';
 import { type DemoRole, type Scene, runExhibit } from './player';
+import { type Span, approach, createTimeline, progressAt, sectionFill } from './progress';
 import { EXHIBIT_SCENES } from './scenes';
 import { ensureDemoSession } from './session';
 
@@ -45,8 +47,11 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+const sceneNo = (index: number) => String(index + 1).padStart(2, '0');
+
 type Cursor = { x: number; y: number; ms: number };
 type Card = { no: string; title: string; on: boolean };
+type TourControls = { takeOver: () => void; resume: () => void; jumpTo: (index: number) => void };
 
 type ExhibitOverlayProps = {
   navigate: (to: string) => void | Promise<void>;
@@ -73,7 +78,9 @@ export default function ExhibitOverlay({
   const [paused, setPaused] = useState(false);
   // 진행도바가 가리키는 지금 장면(0부터)
   const [sceneIndex, setSceneIndex] = useState(0);
-  const tourControls = useRef({ takeOver: () => {}, resume: () => {} });
+  const tourControls = useRef<TourControls>({ takeOver: () => {}, resume: () => {}, jumpTo: () => {} });
+  // 진행도바 칸마다 채움 — 매 프레임 렌더를 피하려고 폭을 직접 쓴다
+  const fills = useRef<(HTMLSpanElement | null)[]>([]);
   const shield = useRef<HTMLDivElement>(null);
   const [pointerStill, setPointerStill] = useState(true);
   const pointerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -82,6 +89,7 @@ export default function ExhibitOverlay({
   if (gateRef.current === null) gateRef.current = createPauseGate();
   // 순환은 화면 수명 동안 한 번만 만든다 — 첫 렌더의 값으로 고정
   const setup = useRef({ navigate, scenes, ensureSession, isHumanEvent, idleMs, cardMs });
+  const [timeline] = useState(() => createTimeline(scenes, cardMs));
 
   useEffect(() => {
     const config = setup.current;
@@ -89,6 +97,31 @@ export default function ExhibitOverlay({
     const fadeMs = Math.min(FADE_MS, config.cardMs);
     let cardOn = false;
     let cursorAt: { x: number; y: number } | null = null;
+
+    // 진행도바: 지금 구간, 그 구간에서 멈춤 없이 흐른 시간, 보이는 위치(0~1)
+    let span: Span | null = null;
+    let spanElapsed = 0;
+    let shown = 0;
+    let lastFrame = performance.now();
+    let frame = 0;
+    const enterSpan = (next: Span) => {
+      span = next;
+      spanElapsed = 0;
+    };
+    const drawProgress = (now: number) => {
+      const dt = Math.max(0, now - lastFrame);
+      lastFrame = now;
+      if (span) {
+        if (!gate.paused()) spanElapsed += dt;
+        shown = approach(shown, progressAt(span, spanElapsed, timeline.totalMs), dt);
+        timeline.scenes.forEach((section, index) => {
+          const fill = fills.current[index];
+          if (fill) fill.style.width = `${sectionFill(section, shown * timeline.totalMs) * 100}%`;
+        });
+      }
+      frame = requestAnimationFrame(drawProgress);
+    };
+    frame = requestAnimationFrame(drawProgress);
 
     // 멈춤이면 '계속'이나 직접 조작 전환까지 기다렸다 다음 단계로 — 매 단계 경계에서 지난다
     const tourSleep = async (ms: number, signal: AbortSignal) => {
@@ -108,7 +141,7 @@ export default function ExhibitOverlay({
     const sceneStart = async (index: number, scene: Scene, signal: AbortSignal) => {
       cardOn = true;
       setCaption('');
-      setCard({ no: String(index + 1).padStart(2, '0'), title: scene.title, on: true });
+      setCard({ no: sceneNo(index), title: scene.title, on: true });
       await sleep(fadeMs, signal);
       await sleep(Math.max(0, config.cardMs - fadeMs), signal);
     };
@@ -186,23 +219,29 @@ export default function ExhibitOverlay({
           },
           onScene: (index) => {
             setSceneIndex(index);
+            enterSpan(timeline.span(index));
             onScene(index);
           },
+          onStep: (index, stepIndex) => enterSpan(timeline.span(index, stepIndex)),
         }),
     });
 
-    tourControls.current = { takeOver: () => controller.takeOver(), resume: () => controller.resume() };
+    tourControls.current = {
+      takeOver: () => controller.takeOver(),
+      resume: () => controller.resume(),
+      jumpTo: (index) => controller.jumpTo(index),
+    };
     controller.start();
     const stopWatching = watchHumanInput(window, () => controller.humanInput(), config.isHumanEvent);
     return () => {
       stopWatching();
       controller.stop();
+      cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [timeline]);
 
   const idleSec = Math.round(idleMs / 1000);
   const auto = mode === 'auto';
-  const sceneCount = scenes.length;
 
   // 막 위의 휠은 뒤 페이지를 굴리지 않게 막는다(React onWheel은 passive라 직접 붙인다)
   useEffect(() => {
@@ -223,6 +262,12 @@ export default function ExhibitOverlay({
     setPointerStill(false);
     clearTimeout(pointerTimer.current);
     pointerTimer.current = setTimeout(() => setPointerStill(true), POINTER_SHOW_MS);
+  };
+
+  const jumpTo = (index: number) => {
+    // 같은 경로로 가면 화면이 다시 그려지지 않는다 — 열린 창(증명서 등)을 먼저 닫는다
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    tourControls.current.jumpTo(index);
   };
 
   const togglePause = () => {
@@ -276,16 +321,29 @@ export default function ExhibitOverlay({
         </div>
       ) : null}
       {auto ? (
-        <div
-          data-testid="exhibit-progress"
-          className="exhibit-progress"
-          role="progressbar"
-          aria-label="시연 진행도"
-          aria-valuemin={0}
-          aria-valuemax={sceneCount}
-          aria-valuenow={sceneIndex + 1}
-        >
-          <span className="exhibit-progress__fill" style={{ width: `${((sceneIndex + 1) / sceneCount) * 100}%` }} />
+        <div data-testid="exhibit-progress" className="exhibit-progress" role="group" aria-label="시연 장면">
+          {scenes.map((scene, index) => (
+            <button
+              key={scene.id}
+              type="button"
+              className="exhibit-progress__section"
+              // 칸 폭은 장면 예상 길이에 비례한다
+              style={{ flexGrow: timeline.scenes[index].ms }}
+              aria-current={index === sceneIndex ? 'step' : undefined}
+              onClick={() => jumpTo(index)}
+            >
+              <span className="exhibit-progress__track">
+                <span
+                  ref={(el) => {
+                    fills.current[index] = el;
+                  }}
+                  data-testid="exhibit-progress-fill"
+                  className="exhibit-progress__fill"
+                />
+              </span>
+              <span className="exhibit-progress__tip">{`${sceneNo(index)} ${scene.title}`}</span>
+            </button>
+          ))}
         </div>
       ) : null}
       {auto ? (

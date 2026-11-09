@@ -38,6 +38,8 @@ export type PlayerDeps = {
   press?: (signal: AbortSignal) => Promise<void>;
   waitForTarget?: (target: Target, signal: AbortSignal, timeoutMs: number) => Promise<HTMLElement>;
   onScene?: (index: number, scene: Scene) => void;
+  // 단계를 시작하기 직전 — 진행도바가 이 단계 구간으로 다시 맞춘다
+  onStep?: (sceneIndex: number, stepIndex: number) => void;
 };
 
 // 화면이 데이터를 받아 그릴 때까지 기다리는 한도
@@ -51,6 +53,34 @@ const TYPE_KEY_JITTER_MS = 50;
 const SCROLL_PAUSE_MS = 900;
 // 장면이 실패하면 잠깐 쉬고 다음 장면으로 — 모든 장면이 곧바로 실패해도 브라우저를 붙잡지 않게
 const FAILED_SCENE_PAUSE_MS = 3_000;
+
+// 진행도바용 단계별 예상 시간. 실제로는 화면 로딩·커서 거리에 따라 다르다
+// 스크롤 정착 + 커서 이동 평균(ExhibitOverlay의 pointAt)
+const EXPECTED_POINT_MS = 900;
+// 누름 효과(ExhibitOverlay의 PRESS_MS)
+const EXPECTED_PRESS_MS = 150;
+// 화면이 데이터를 받아 그리는 평균
+const EXPECTED_READY_MS = 600;
+
+export function expectedStepMs(step: Step): number {
+  switch (step.do) {
+    case 'wait':
+      return step.ms;
+    case 'ready':
+      return EXPECTED_READY_MS;
+    case 'point':
+      return EXPECTED_POINT_MS;
+    case 'click':
+      return EXPECTED_POINT_MS + EXPECTED_PRESS_MS + CLICK_PAUSE_MS;
+    case 'type':
+      return EXPECTED_POINT_MS + step.text.length * (TYPE_KEY_MS + TYPE_KEY_JITTER_MS / 2);
+    case 'scroll':
+      return SCROLL_PAUSE_MS;
+    case 'go':
+    case 'caption':
+      return 0;
+  }
+}
 
 export async function runExhibit(
   scenes: Scene[],
@@ -128,8 +158,9 @@ export async function runExhibit(
     try {
       await deps.sceneStart?.(index, scene, signal);
       await deps.beforeScene?.(scene, signal);
-      for (const step of scene.steps) {
+      for (const [stepIndex, step] of scene.steps.entries()) {
         if (signal.aborted) return;
+        deps.onStep?.(index, stepIndex);
         await runStep(step);
       }
     } catch {

@@ -131,4 +131,26 @@ describe('createExhibitController', () => {
 
     expect(runs).toHaveLength(1);
   });
+
+  it('jumps to the chosen scene while touring', () => {
+    const { controller, runs, modes } = setup();
+    controller.start();
+
+    controller.jumpTo(2);
+
+    expect(runs[0].signal.aborted).toBe(true);
+    expect(runs).toHaveLength(2);
+    expect(runs[1].startAt).toBe(2);
+    expect(modes.at(-1)).toBe('auto');
+  });
+
+  it('does not jump while a person is in control', () => {
+    const { controller, runs } = setup();
+    controller.start();
+    controller.takeOver();
+
+    controller.jumpTo(1);
+
+    expect(runs).toHaveLength(1);
+  });
 });

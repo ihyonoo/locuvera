@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TargetNotFoundError } from './dom';
-import { CLICK_PAUSE_MS, type PlayerDeps, type Scene, runExhibit } from './player';
+import { CLICK_PAUSE_MS, type PlayerDeps, type Scene, expectedStepMs, runExhibit } from './player';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -247,5 +247,49 @@ describe('runExhibit', () => {
     await runExhibit(SCENES, 0, controller.signal, deps);
 
     expect(clicked).not.toHaveBeenCalled();
+  });
+
+  it('reports each step with its scene and step number just before running it', async () => {
+    document.body.innerHTML = '<button id="row"></button>';
+    const controller = new AbortController();
+    const { log, deps } = makeDeps(controller, 2, {
+      onStep: (sceneIndex, stepIndex) => {
+        log.push(`step ${sceneIndex}.${stepIndex}`);
+      },
+    });
+
+    await runExhibit(SCENES, 0, controller.signal, deps);
+
+    expect(log.filter((line) => line.startsWith('step ') || line.startsWith('go '))).toEqual([
+      'step 0.0',
+      'go /equipment',
+      'step 0.1',
+      'step 0.2',
+      'step 1.0',
+      'go /admin/devices',
+      'step 1.1',
+    ]);
+  });
+});
+
+describe('expectedStepMs', () => {
+  it('counts a wait step as exactly its length', () => {
+    expect(expectedStepMs({ do: 'wait', ms: 1234 })).toBe(1234);
+  });
+
+  it('expects typing to take longer the longer the text', () => {
+    const target = { selector: 'input' };
+    const short = expectedStepMs({ do: 'type', target, text: 'ab' });
+    const long = expectedStepMs({ do: 'type', target, text: 'abcdefgh' });
+
+    expect(long).toBeGreaterThan(short);
+  });
+
+  it('gives every on-screen action some time on the bar', () => {
+    const target = { selector: '#row' };
+
+    expect(expectedStepMs({ do: 'click', target })).toBeGreaterThan(CLICK_PAUSE_MS);
+    expect(expectedStepMs({ do: 'point', target })).toBeGreaterThan(0);
+    expect(expectedStepMs({ do: 'scroll', target, by: 300 })).toBeGreaterThan(0);
   });
 });
