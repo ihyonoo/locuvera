@@ -16,7 +16,16 @@ const SCENES: Scene[] = [
       { do: 'wait', ms: 300 },
     ],
   },
-  { id: 'clip', title: '측위 보고 위조 차단', steps: [{ do: 'clip', src: '/exhibit/forge-ingest.mp4' }] },
+  {
+    id: 'util',
+    title: '장비 가동률 분석',
+    role: 'admin',
+    steps: [
+      { do: 'go', to: '/admin/utilization' },
+      { do: 'caption', text: '최근 7일 가동률 집계' },
+      { do: 'wait', ms: 300 },
+    ],
+  },
 ];
 
 // 간지는 테스트에서 짧게 띄운다
@@ -57,75 +66,29 @@ describe('ExhibitOverlay', () => {
     expect(screen.queryByText(/마우스를 움직이면/)).not.toBeInTheDocument();
   });
 
-  it('shows a live attack in a terminal panel as its lines come in', async () => {
-    const attack = vi.fn(async ({ print }: { print: (line: { text: string }) => void }) => {
-      print({ text: '━━ 측위 보고 위조 차단 ━━' });
-      print({ text: '    → 401 리더 인증 정보가 올바르지 않습니다. · 차단' });
-    });
-    render(
-      <ExhibitOverlay
-        navigate={vi.fn()}
-        scenes={[{ id: 'live', title: '측위 보고 위조 차단', steps: [{ do: 'attack', attack: 'forge-ingest' }] }]}
-        ensureSession={vi.fn(async () => {})}
-        isHumanEvent={fromPerson}
-        cardMs={CARD_MS}
-        attacks={{ 'forge-ingest': attack, 'replay-nfc': vi.fn(async () => {}) }}
-      />,
-    );
+  it('shows both a pause button and a take-over button during the tour', async () => {
+    renderOverlay();
 
-    const panel = await screen.findByTestId('exhibit-terminal');
-    await vi.waitFor(() => expect(panel).toHaveTextContent('401 리더 인증 정보가 올바르지 않습니다. · 차단'));
-    expect(panel).toHaveTextContent('측위 보고 위조 차단');
+    expect(await screen.findByRole('button', { name: '일시정지' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '직접 조작하기' })).toBeInTheDocument();
   });
 
-  it('shows the running attack code beside the terminal and highlights the current step', async () => {
-    const attack = vi.fn(async ({ mark }: { mark?: (key: 'forge-sign') => void }) => {
-      mark?.('forge-sign');
-    });
-    render(
-      <ExhibitOverlay
-        navigate={vi.fn()}
-        scenes={[{ id: 'live', title: '측위 보고 위조 차단', steps: [{ do: 'attack', attack: 'forge-ingest' }] }]}
-        ensureSession={vi.fn(async () => {})}
-        isHumanEvent={fromPerson}
-        cardMs={CARD_MS}
-        attacks={{ 'forge-ingest': attack, 'replay-nfc': vi.fn(async () => {}) }}
-      />,
-    );
+  it('flips the pause button to 계속 and back when toggled', async () => {
+    renderOverlay();
 
-    const code = await screen.findByTestId('exhibit-code');
-    expect(code).toHaveTextContent('export async function buildForgedReports');
-    await vi.waitFor(() => {
-      const marked = code.querySelectorAll('.exhibit-code__line--on');
-      expect(Array.from(marked).some((line) => line.textContent?.includes('hmacSha256Hex(attackerKey'))).toBe(true);
-    });
+    fireEvent.click(await screen.findByRole('button', { name: '일시정지' }));
+    expect(screen.getByRole('button', { name: '계속' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '계속' }));
+    expect(screen.getByRole('button', { name: '일시정지' })).toBeInTheDocument();
   });
 
-  it('plays a security clip and moves on when it ends', async () => {
-    const navigate = vi.fn();
-    renderOverlay(navigate);
+  it('shows a progress bar for the current scene out of the total', async () => {
+    renderOverlay();
 
-    const video = await screen.findByTestId('exhibit-clip');
-    expect(video).toHaveAttribute('src', '/exhibit/forge-ingest.mp4');
-
-    fireEvent.ended(video);
-
-    await vi.waitFor(() => expect(navigate).toHaveBeenCalledTimes(2));
-    expect(screen.queryByTestId('exhibit-clip')).not.toBeInTheDocument();
-  });
-
-  it('hides the cursor while a clip plays', async () => {
-    document.body.insertAdjacentHTML('beforeend', '<button id="target">대상</button>');
-    renderOverlay(vi.fn(), [
-      { id: 'point', title: '가리키기', steps: [{ do: 'point', target: { selector: '#target' } }] },
-      { id: 'clip', title: '클립', steps: [{ do: 'clip', src: '/exhibit/forge-ingest.mp4' }] },
-    ]);
-
-    expect(await screen.findByTestId('exhibit-cursor')).toBeInTheDocument();
-    await screen.findByTestId('exhibit-clip');
-
-    expect(screen.queryByTestId('exhibit-cursor')).not.toBeInTheDocument();
-    document.getElementById('target')?.remove();
+    const bar = await screen.findByTestId('exhibit-progress');
+    expect(bar).toHaveAttribute('aria-valuemax', String(SCENES.length));
+    expect(bar).toHaveAttribute('aria-valuenow', '1');
   });
 
   it('keeps playing when a person moves the mouse or clicks, and blocks the app underneath', async () => {
@@ -174,7 +137,7 @@ describe('ExhibitOverlay', () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(screen.queryByText(/직접 조작 중/)).not.toBeInTheDocument();
-    expect(screen.getByTestId('exhibit-card')).toHaveTextContent('측위 보고 위조 차단');
+    expect(screen.getByTestId('exhibit-card')).toHaveTextContent('장비 가동률 분석');
   });
 
   it('goes straight back to the tour from the button without waiting a minute', async () => {
@@ -185,6 +148,6 @@ describe('ExhibitOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '자동 시연으로 돌아가기' }));
 
     expect(screen.queryByText(/직접 조작 중/)).not.toBeInTheDocument();
-    expect(screen.getByTestId('exhibit-card')).toHaveTextContent('측위 보고 위조 차단');
+    expect(screen.getByTestId('exhibit-card')).toHaveTextContent('장비 가동률 분석');
   });
 });

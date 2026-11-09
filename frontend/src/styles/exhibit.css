@@ -20,217 +20,67 @@
   cursor: none;
 }
 
-/* 자동 시연을 멈추는 유일한 수단 */
-.exhibit-takeover {
+/* 오른쪽 아래 조작 단추 묶음 — 보이되 덜 튀게, 올리면 또렷해진다. 층 전체는 클릭을 통과시키지만 이 단추만 누를 수 있다 */
+.exhibit-controls {
   position: absolute;
-  right: 24px;
-  bottom: 24px;
-  padding: 10px 18px;
+  right: 20px;
+  bottom: 18px;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.exhibit-ctl {
+  padding: 7px 15px;
   border: 0;
   border-radius: 999px;
-  background: rgb(17 24 28 / 0.72);
-  color: #f3f4f4;
+  background: rgb(17 24 28 / 0.42);
+  color: rgb(243 244 244 / 0.82);
   font: inherit;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  opacity: 0.55;
   pointer-events: auto;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  transition:
+    opacity 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
-.exhibit-takeover:hover {
+.exhibit-ctl:hover,
+.exhibit-ctl:focus-visible {
+  opacity: 1;
   background: rgb(17 24 28 / 0.9);
+  color: #f3f4f4;
 }
 
-.exhibit-takeover:focus-visible {
+.exhibit-ctl:focus-visible {
   outline: 2px solid #5eead4;
   outline-offset: 2px;
 }
 
-/* 페이드 시간은 FADE_MS와 같다 */
-.exhibit-clip {
+/* 진행도바 — 맨 아래 가운데, 적당한 폭의 얇은 바. 지금 장면 수만큼 좌→우로 채운다 */
+.exhibit-progress {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;
-  animation: exhibit-fade-in 400ms ease-out;
+  bottom: 12px;
+  left: 50%;
+  width: min(360px, calc(100vw - 48px));
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.18);
+  transform: translateX(-50%);
 }
 
-/* 화면 비율이 16:9에서 조금 어긋나도 검은 띠 없이 채운다 */
-.exhibit-clip video {
-  width: 100%;
+.exhibit-progress__fill {
+  display: block;
   height: 100%;
-  object-fit: cover;
-}
-
-/* 라이브 보안 실연 패널(attacks.ts) — 서버 응답이 올 때마다 한 줄씩 그린다. 아래 자막 자리를 비워 둔다 */
-.exhibit-term-stage {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-bottom: 96px;
-  background: #0b1120;
-  animation: exhibit-fade-in 400ms ease-out;
-}
-
-/* 왼쪽 실행 결과, 오른쪽 실행 중인 코드(옛 시연 영상처럼) */
-.exhibit-live {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
-  gap: 20px;
-  width: min(1820px, calc(100vw - 64px));
-  height: min(840px, calc(100vh - 190px));
-}
-
-.exhibit-live > .exhibit-term:only-child {
-  grid-column: 1 / -1;
-}
-
-.exhibit-term {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 12px;
-  background: #1e1e1e;
-  box-shadow:
-    0 24px 60px rgb(0 0 0 / 0.5),
-    0 0 0 1px rgb(255 255 255 / 0.08);
-}
-
-.exhibit-term__bar {
-  position: relative;
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 14px;
-  border-bottom: 1px solid #000;
-  background: #2d2d2d;
-}
-
-.exhibit-term__bar i {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: #ff5f57;
-}
-
-.exhibit-term__bar i:nth-child(2) {
-  background: #febc2e;
-}
-
-.exhibit-term__bar i:nth-child(3) {
-  background: #28c840;
-}
-
-.exhibit-term__bar span {
-  position: absolute;
-  right: 0;
-  left: 0;
-  color: #b4b4b4;
-  font-size: 14px;
-  font-weight: 500;
-  text-align: center;
-}
-
-.exhibit-term__body {
-  flex: 1;
-  padding: 18px 26px;
-  overflow: hidden;
-  color: #dcdcdc;
-  font-family: Menlo, 'Apple SD Gothic Neo', 'Noto Sans KR', monospace;
-  font-size: clamp(16px, 1.15vw, 22px);
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.exhibit-term__line {
-  min-height: 1.5em;
-  animation: exhibit-fade-in 160ms ease-out;
-}
-
-.exhibit-term__line--title,
-.exhibit-term__line--head {
-  color: #f5f5f5;
-  font-weight: 700;
-}
-
-.exhibit-term__line--dim {
-  color: #8e8e8e;
-}
-
-.exhibit-term__line--good {
-  color: #5fd38d;
-  font-weight: 600;
-}
-
-.exhibit-term__line--bad {
-  color: #ff7b72;
-  font-weight: 600;
-}
-
-/* 편집기 창: VS Code 어두운 테마에 가까운 색 */
-.exhibit-code__body {
-  flex: 1;
-  padding: 14px 0;
-  overflow: hidden;
-  color: #d4d4d4;
-  font-family: Menlo, 'Apple SD Gothic Neo', 'Noto Sans KR', monospace;
-  font-size: clamp(12px, 0.82vw, 16px);
-  line-height: 1.55;
-  white-space: pre;
-}
-
-.exhibit-code__line {
-  display: flex;
-  padding-right: 16px;
-  border-left: 3px solid transparent;
-  transition: background-color 250ms ease;
-}
-
-.exhibit-code__line--on {
-  border-left-color: #2dd4bf;
-  background: rgb(45 212 191 / 0.14);
-}
-
-.exhibit-code__no {
-  flex: none;
-  width: 3.4em;
-  padding-right: 1.1em;
-  color: #6e7681;
-  text-align: right;
-  user-select: none;
-}
-
-.exhibit-code__line--on .exhibit-code__no {
-  color: #d4d4d4;
-}
-
-.exhibit-code__src {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.exhibit-code__keyword {
-  color: #569cd6;
-}
-
-.exhibit-code__string {
-  color: #ce9178;
-}
-
-.exhibit-code__comment {
-  color: #6a9955;
-}
-
-.exhibit-code__number {
-  color: #b5cea8;
+  border-radius: inherit;
+  background: #2dd4bf;
+  transition: width 400ms ease;
 }
 
 .exhibit-card {
@@ -390,113 +240,19 @@
 @media (prefers-reduced-motion: reduce) {
   .exhibit-cursor,
   .exhibit-cursor svg,
-  .exhibit-cursor__glow,
-  /* 라이브 보안 실연 패널(attacks.ts) — 서버 응답이 올 때마다 한 줄씩 그린다. 아래 자막 자리를 비워 둔다 */
-.exhibit-term-stage {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding-bottom: 96px;
-    background: #0b1120;
-    animation: exhibit-fade-in 400ms ease-out;
-  }
-
-  .exhibit-term {
-    display: flex;
-    flex-direction: column;
-    width: min(1500px, calc(100vw - 96px));
-    height: min(820px, calc(100vh - 200px));
-    overflow: hidden;
-    border-radius: 12px;
-    background: #1e1e1e;
-    box-shadow:
-      0 24px 60px rgb(0 0 0 / 0.5),
-      0 0 0 1px rgb(255 255 255 / 0.08);
-  }
-
-  .exhibit-term__bar {
-    position: relative;
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: 8px;
-    height: 36px;
-    padding: 0 14px;
-    border-bottom: 1px solid #000;
-    background: #2d2d2d;
-  }
-
-  .exhibit-term__bar i {
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    background: #ff5f57;
-  }
-
-  .exhibit-term__bar i:nth-child(2) {
-    background: #febc2e;
-  }
-
-  .exhibit-term__bar i:nth-child(3) {
-    background: #28c840;
-  }
-
-  .exhibit-term__bar span {
-    position: absolute;
-    right: 0;
-    left: 0;
-    color: #b4b4b4;
-    font-size: 14px;
-    font-weight: 500;
-    text-align: center;
-  }
-
-  .exhibit-term__body {
-    flex: 1;
-    padding: 18px 26px;
-    overflow: hidden;
-    color: #dcdcdc;
-    font-family: Menlo, 'Apple SD Gothic Neo', 'Noto Sans KR', monospace;
-    font-size: clamp(16px, 1.15vw, 22px);
-    line-height: 1.5;
-    white-space: pre-wrap;
-  }
-
-  .exhibit-term__line {
-    min-height: 1.5em;
-    animation: exhibit-fade-in 160ms ease-out;
-  }
-
-  .exhibit-term__line--title,
-  .exhibit-term__line--head {
-    color: #f5f5f5;
-    font-weight: 700;
-  }
-
-  .exhibit-term__line--dim {
-    color: #8e8e8e;
-  }
-
-  .exhibit-term__line--good {
-    color: #5fd38d;
-    font-weight: 600;
-  }
-
-  .exhibit-term__line--bad {
-    color: #ff7b72;
-    font-weight: 600;
+  .exhibit-cursor__glow {
+    transition: none;
   }
 
   .exhibit-card {
     transition: none;
   }
 
-  .exhibit-clip,
-  .exhibit-caption,
-  .exhibit-term-stage,
-  .exhibit-term__line {
+  .exhibit-progress__fill {
+    transition: none;
+  }
+
+  .exhibit-caption {
     animation: none;
   }
 }

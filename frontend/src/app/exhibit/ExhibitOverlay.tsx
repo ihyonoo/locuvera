@@ -1,16 +1,13 @@
-// 학술제 전시 모드 화면 층. 대본대로 앱을 조작하고, '직접 조작하기'를 누르면 손을 뗀다
+// 학술제 전시 모드 화면 층. 대본대로 앱 화면 4개를 돌며, '직접 조작하기'를 누르면 손을 뗀다
 // 자동 시연 중에는 투명한 막이 앱을 덮어 관람객의 마우스·클릭이 대본을 흐트러뜨리지 않는다
 // 시연 영상처럼 장면마다 간지(번호·제목)로 열고, 단계마다 아래 자막으로 설명한다
-// 간지·커서·클립·자막은 앱 위에 겹치며 클릭을 가로채지 않는다
+// '일시정지'는 지금 화면에 멈춰 세우고(pauseGate), 아래 진행도바가 몇 번째 장면인지 보여 준다
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { getStoredAuthToken } from '../lib/auth';
-import { API_BASE_URL } from '../lib/runtime';
 import '../../styles/exhibit.css';
-import { ATTACK_SOURCE_PATH, CODE_EXCERPTS, highlightLine, markedLines } from './attackCode';
-import { ATTACKS, type Attack, type AttackKind, type TermLine } from './attacks';
 import { type ExhibitMode, createExhibitController } from './controller';
 import { abortError } from './dom';
 import { type HumanEventCheck, watchHumanInput } from './humanInput';
+import { type PauseGate, createPauseGate } from './pauseGate';
 import { type DemoRole, type Scene, runExhibit } from './player';
 import { EXHIBIT_SCENES } from './scenes';
 import { ensureDemoSession } from './session';
@@ -20,7 +17,7 @@ const IDLE_MS = 60_000;
 const POINTER_SHOW_MS = 2_500;
 // 간지를 띄워 두는 최소 시간. 화면 이동·로그인·로딩은 그 뒤에서 끝난다
 const CARD_MS = 1_400;
-// exhibit.css의 간지·클립 페이드 시간과 맞춘다
+// exhibit.css의 간지 페이드 시간과 맞춘다
 const FADE_MS = 400;
 // 커서 이동 시간은 거리에 따라 늘어난다
 const CURSOR_MIN_MS = 380;
@@ -29,8 +26,6 @@ const CURSOR_MS_PER_PX = 0.45;
 const PRESS_MS = 150;
 const SCROLL_POLL_MS = 120;
 const SCROLL_SETTLE_MAX_MS = 2_000;
-// 영상이 멈춰 끝나지 않아도 순환은 계속된다
-const CLIP_MAX_MS = 120_000;
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -60,7 +55,6 @@ type ExhibitOverlayProps = {
   isHumanEvent?: HumanEventCheck;
   idleMs?: number;
   cardMs?: number;
-  attacks?: Record<AttackKind, Attack>;
 };
 
 export default function ExhibitOverlay({
@@ -70,32 +64,37 @@ export default function ExhibitOverlay({
   isHumanEvent,
   idleMs = IDLE_MS,
   cardMs = CARD_MS,
-  attacks = ATTACKS,
 }: ExhibitOverlayProps) {
   const [mode, setMode] = useState<ExhibitMode>('auto');
   const [card, setCard] = useState<Card | null>(null);
   const [caption, setCaption] = useState('');
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [pressed, setPressed] = useState(false);
-  const [clip, setClip] = useState<string | null>(null);
-  const [terminal, setTerminal] = useState<TermLine[] | null>(null);
-  const terminalBody = useRef<HTMLDivElement>(null);
-  // 실연 옆 코드 창: 어느 공격의 코드인지와 지금 강조할 줄
-  const [codeView, setCodeView] = useState<{ attack: AttackKind; marked: number[] } | null>(null);
-  const codeBody = useRef<HTMLDivElement>(null);
-  const finishClip = useRef<(() => void) | null>(null);
+  const [paused, setPaused] = useState(false);
+  // 진행도바가 가리키는 지금 장면(0부터)
+  const [sceneIndex, setSceneIndex] = useState(0);
   const tourControls = useRef({ takeOver: () => {}, resume: () => {} });
   const shield = useRef<HTMLDivElement>(null);
   const [pointerStill, setPointerStill] = useState(true);
   const pointerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 멈춤 문은 화면 수명 동안 하나만 둔다
+  const gateRef = useRef<PauseGate | null>(null);
+  if (gateRef.current === null) gateRef.current = createPauseGate();
   // 순환은 화면 수명 동안 한 번만 만든다 — 첫 렌더의 값으로 고정
-  const setup = useRef({ navigate, scenes, ensureSession, isHumanEvent, idleMs, cardMs, attacks });
+  const setup = useRef({ navigate, scenes, ensureSession, isHumanEvent, idleMs, cardMs });
 
   useEffect(() => {
     const config = setup.current;
+    const gate = gateRef.current!;
     const fadeMs = Math.min(FADE_MS, config.cardMs);
     let cardOn = false;
     let cursorAt: { x: number; y: number } | null = null;
+
+    // 멈춤이면 '계속'이나 직접 조작 전환까지 기다렸다 다음 단계로 — 매 단계 경계에서 지난다
+    const tourSleep = async (ms: number, signal: AbortSignal) => {
+      await sleep(ms, signal);
+      await gate.wait(signal);
+    };
 
     // 간지가 떠 있으면 걷어 낸다 — 화면에 무언가를 보여 주는 단계마다 먼저 부른다
     const reveal = async (signal: AbortSignal) => {
@@ -105,15 +104,12 @@ export default function ExhibitOverlay({
       await sleep(fadeMs, signal);
     };
 
-    // 간지가 앞 장면(끝난 클립의 마지막 화면 포함) 위로 덮인 뒤에 그 아래를 비운다
+    // 간지가 앞 장면 위로 덮인 뒤에 그 아래를 비운다
     const sceneStart = async (index: number, scene: Scene, signal: AbortSignal) => {
       cardOn = true;
       setCaption('');
       setCard({ no: String(index + 1).padStart(2, '0'), title: scene.title, on: true });
       await sleep(fadeMs, signal);
-      setClip(null);
-      setTerminal(null);
-      setCodeView(null);
       await sleep(Math.max(0, config.cardMs - fadeMs), signal);
     };
 
@@ -161,68 +157,37 @@ export default function ExhibitOverlay({
       setCaption(text);
     };
 
-    // 클립을 간지 뒤에 먼저 띄우고 간지를 걷는다. 끝나면 마지막 화면에 멈춘 채 다음 간지를 기다린다
-    // 실연 패널을 간지 뒤에 먼저 띄우고 걷은 뒤, 서버 응답이 올 때마다 한 줄씩 그린다
-    const runAttack = async (kind: AttackKind, signal: AbortSignal) => {
-      setTerminal([]);
-      setCodeView({ attack: kind, marked: [] });
-      await reveal(signal);
-      await config.attacks[kind]({
-        api: API_BASE_URL,
-        token: getStoredAuthToken(),
-        print: (line) => setTerminal((prev) => (prev ? [...prev, line] : prev)),
-        mark: (mark) => setCodeView((prev) => (prev ? { ...prev, marked: markedLines(mark) } : prev)),
-        pause: (ms) => sleep(ms, signal),
-        signal,
-      });
-    };
-
-    const playClip = (src: string, signal: AbortSignal, text?: string) =>
-      new Promise<void>((resolve) => {
-        const finish = () => {
-          clearTimeout(guard);
-          signal.removeEventListener('abort', finish);
-          finishClip.current = null;
-          resolve();
-        };
-        const guard = setTimeout(finish, CLIP_MAX_MS);
-        finishClip.current = finish;
-        signal.addEventListener('abort', finish, { once: true });
-        setClip(src);
-        setCaption(text ?? '');
-        reveal(signal).catch(() => {});
-      });
-
     const controller = createExhibitController({
       sceneCount: config.scenes.length,
       idleMs: config.idleMs,
       onMode: (next) => {
         setMode(next);
+        // 새 순환은 멈춤 없이 시작하고, 직접 조작으로 넘어갈 때도 멈춤을 푼다
+        gate.resume();
+        setPaused(false);
         if (next === 'manual') {
           cardOn = false;
           cursorAt = null;
           setCard(null);
           setCaption('');
           setCursor(null);
-          setClip(null);
-          setTerminal(null);
-          setCodeView(null);
         }
       },
       run: (startAt, signal, onScene) =>
         runExhibit(config.scenes, startAt, signal, {
           navigate: config.navigate,
-          sleep,
+          sleep: tourSleep,
           pointAt,
           press,
-          playClip,
-          runAttack,
           sceneStart,
           caption: showCaption,
           beforeScene: async (scene) => {
             if (scene.role) await config.ensureSession(scene.role);
           },
-          onScene: (index) => onScene(index),
+          onScene: (index) => {
+            setSceneIndex(index);
+            onScene(index);
+          },
         }),
     });
 
@@ -237,6 +202,7 @@ export default function ExhibitOverlay({
 
   const idleSec = Math.round(idleMs / 1000);
   const auto = mode === 'auto';
+  const sceneCount = scenes.length;
 
   // 막 위의 휠은 뒤 페이지를 굴리지 않게 막는다(React onWheel은 passive라 직접 붙인다)
   useEffect(() => {
@@ -253,27 +219,21 @@ export default function ExhibitOverlay({
 
   useEffect(() => () => clearTimeout(pointerTimer.current), []);
 
-  useEffect(() => {
-    const body = terminalBody.current;
-    if (body) body.scrollTop = body.scrollHeight;
-  }, [terminal]);
-
-  // 강조한 줄이 코드 창 가운데에 오게 굴린다
-  useEffect(() => {
-    const body = codeBody.current;
-    const first = codeView?.marked[0];
-    if (!body || !first) return;
-    const line = body.querySelector<HTMLElement>(`[data-line="${first}"]`);
-    if (!line) return;
-    const top = line.offsetTop - body.clientHeight / 2 + line.offsetHeight * 2;
-    if (typeof body.scrollTo === 'function') body.scrollTo({ top, behavior: 'smooth' });
-    else body.scrollTop = top;
-  }, [codeView]);
-
   const showPointer = () => {
     setPointerStill(false);
     clearTimeout(pointerTimer.current);
     pointerTimer.current = setTimeout(() => setPointerStill(true), POINTER_SHOW_MS);
+  };
+
+  const togglePause = () => {
+    const gate = gateRef.current!;
+    if (gate.paused()) {
+      gate.resume();
+      setPaused(false);
+    } else {
+      gate.pause();
+      setPaused(true);
+    }
   };
 
   return (
@@ -286,80 +246,13 @@ export default function ExhibitOverlay({
           onPointerMove={showPointer}
         />
       ) : null}
-      {auto && clip ? (
-        <div className="exhibit-clip">
-          <video
-            key={clip}
-            data-testid="exhibit-clip"
-            src={clip}
-            autoPlay
-            muted
-            playsInline
-            onEnded={() => finishClip.current?.()}
-            onError={() => finishClip.current?.()}
-          />
-        </div>
-      ) : null}
       {auto && card ? (
         <div data-testid="exhibit-card" className={card.on ? 'exhibit-card exhibit-card--on' : 'exhibit-card'}>
           <div className="exhibit-card__no">{card.no}</div>
           <div className="exhibit-card__title">{card.title}</div>
         </div>
       ) : null}
-      {auto && terminal ? (
-        <div className="exhibit-term-stage">
-          <div className="exhibit-live">
-            <div data-testid="exhibit-terminal" className="exhibit-term">
-              <div className="exhibit-term__bar" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-                <span>운영 서버 실시간 요청 · mediledger.xyz</span>
-              </div>
-              <div ref={terminalBody} className="exhibit-term__body">
-                {terminal.map((line, index) => (
-                  <div key={index} className={`exhibit-term__line exhibit-term__line--${line.tone ?? 'plain'}`}>
-                    {line.text}
-                  </div>
-                ))}
-              </div>
-            </div>
-            {codeView ? (
-              <div data-testid="exhibit-code" className="exhibit-term exhibit-code">
-                <div className="exhibit-term__bar" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                  <span>{ATTACK_SOURCE_PATH}</span>
-                </div>
-                <div ref={codeBody} className="exhibit-code__body">
-                  {CODE_EXCERPTS[codeView.attack].lines.map((source, index) => {
-                    const lineNo = CODE_EXCERPTS[codeView.attack].firstLine + index;
-                    const on = codeView.marked.includes(lineNo);
-                    return (
-                      <div
-                        key={lineNo}
-                        data-line={lineNo}
-                        className={on ? 'exhibit-code__line exhibit-code__line--on' : 'exhibit-code__line'}
-                      >
-                        <span className="exhibit-code__no">{lineNo}</span>
-                        <span className="exhibit-code__src">
-                          {highlightLine(source).map((token, i) => (
-                            <span key={i} className={token.kind ? `exhibit-code__${token.kind}` : undefined}>
-                              {token.text}
-                            </span>
-                          ))}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-      {auto && cursor && !clip && !terminal ? (
+      {auto && cursor ? (
         <div
           data-testid="exhibit-cursor"
           className={pressed ? 'exhibit-cursor exhibit-cursor--press' : 'exhibit-cursor'}
@@ -382,7 +275,29 @@ export default function ExhibitOverlay({
           {caption}
         </div>
       ) : null}
-      {!auto ? (
+      {auto ? (
+        <div
+          data-testid="exhibit-progress"
+          className="exhibit-progress"
+          role="progressbar"
+          aria-label="시연 진행도"
+          aria-valuemin={0}
+          aria-valuemax={sceneCount}
+          aria-valuenow={sceneIndex + 1}
+        >
+          <span className="exhibit-progress__fill" style={{ width: `${((sceneIndex + 1) / sceneCount) * 100}%` }} />
+        </div>
+      ) : null}
+      {auto ? (
+        <div className="exhibit-controls">
+          <button type="button" className="exhibit-ctl" onClick={togglePause}>
+            {paused ? '계속' : '일시정지'}
+          </button>
+          <button type="button" className="exhibit-ctl" onClick={() => tourControls.current.takeOver()}>
+            직접 조작하기
+          </button>
+        </div>
+      ) : (
         <div className="exhibit-banner" role="status">
           <span className="exhibit-banner__dot" aria-hidden="true" />
           <span>직접 조작 중 · {idleSec}초 동안 입력이 없으면 자동 시연으로 돌아갑니다</span>
@@ -390,10 +305,6 @@ export default function ExhibitOverlay({
             자동 시연으로 돌아가기
           </button>
         </div>
-      ) : (
-        <button type="button" className="exhibit-takeover" onClick={() => tourControls.current.takeOver()}>
-          직접 조작하기
-        </button>
       )}
     </div>
   );

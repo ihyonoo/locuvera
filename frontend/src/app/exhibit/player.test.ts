@@ -27,9 +27,6 @@ function makeDeps(controller: AbortController, sceneLimit: number, overrides: Pa
     pointAt: vi.fn(async (el: HTMLElement) => {
       log.push(`point ${el.id}`);
     }),
-    playClip: vi.fn(async (src: string) => {
-      log.push(`clip ${src}`);
-    }),
     beforeScene: vi.fn(async (scene: Scene) => {
       log.push(`enter ${scene.id}`);
     }),
@@ -56,12 +53,12 @@ const SCENES: Scene[] = [
     ],
   },
   {
-    id: 'clip',
-    title: '보안',
+    id: 'devices',
+    title: '기기 상태',
     role: 'admin',
     steps: [
       { do: 'go', to: '/admin/devices' },
-      { do: 'clip', src: '/exhibit/forge-ingest.mp4' },
+      { do: 'wait', ms: 400 },
     ],
   },
 ];
@@ -83,9 +80,9 @@ describe('runExhibit', () => {
       'go /equipment',
       'point row',
       'wait 500',
-      'enter clip',
+      'enter devices',
       'go /admin/devices',
-      'clip /exhibit/forge-ingest.mp4',
+      'wait 400',
       'enter search',
       'go /equipment',
       'point row',
@@ -126,23 +123,6 @@ describe('runExhibit', () => {
     expect(log).toEqual(['card 0 장면', 'enter a', 'go /a', 'caption 설명']);
   });
 
-  it('runs a live attack step through its handler', async () => {
-    const controller = new AbortController();
-    const { log, deps } = makeDeps(controller, 1);
-    deps.runAttack = vi.fn(async (kind: string) => {
-      log.push(`attack ${kind}`);
-    });
-
-    await runExhibit(
-      [{ id: 'live', title: '실연', role: 'staff', steps: [{ do: 'attack', attack: 'forge-ingest' }] }],
-      0,
-      controller.signal,
-      deps,
-    );
-
-    expect(log).toContain('attack forge-ingest');
-  });
-
   it('presses the cursor just before clicking', async () => {
     document.body.innerHTML = '<button id="row"></button>';
     const order: string[] = [];
@@ -170,7 +150,7 @@ describe('runExhibit', () => {
 
     await runExhibit(SCENES, 1, controller.signal, deps);
 
-    expect(log[0]).toBe('enter clip');
+    expect(log[0]).toBe('enter devices');
   });
 
   it('types the text one character at a time', async () => {
@@ -228,7 +208,7 @@ describe('runExhibit', () => {
     await runExhibit(SCENES, 0, controller.signal, deps);
 
     expect(log).not.toContain('wait 500');
-    expect(log).toContain('enter clip');
+    expect(log).toContain('enter devices');
   });
 
   it.each(['click', 'point'] as const)('moves on when an optional %s target is missing', async (kind) => {
