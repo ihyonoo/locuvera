@@ -94,6 +94,58 @@ describe('runExhibit', () => {
     expect(clicked).toHaveBeenCalledTimes(2);
   });
 
+  it('opens each scene with its title card and passes captions and readiness checks through', async () => {
+    document.body.innerHTML = '<div id="map"></div>';
+    const controller = new AbortController();
+    const { log, deps } = makeDeps(controller, 1);
+    deps.sceneStart = vi.fn(async (index: number, scene: Scene) => {
+      log.push(`card ${index} ${scene.title}`);
+    });
+    deps.caption = vi.fn(async (text: string) => {
+      log.push(`caption ${text}`);
+    });
+
+    await runExhibit(
+      [
+        {
+          id: 'a',
+          title: '장면',
+          role: 'staff',
+          steps: [
+            { do: 'go', to: '/a' },
+            { do: 'ready', target: { selector: '#map' } },
+            { do: 'caption', text: '설명' },
+          ],
+        },
+      ],
+      0,
+      controller.signal,
+      deps,
+    );
+
+    expect(log).toEqual(['card 0 장면', 'enter a', 'go /a', 'caption 설명']);
+  });
+
+  it('presses the cursor just before clicking', async () => {
+    document.body.innerHTML = '<button id="row"></button>';
+    const order: string[] = [];
+    document.getElementById('row')?.addEventListener('click', () => order.push('click'));
+    const controller = new AbortController();
+    const { deps } = makeDeps(controller, 1);
+    deps.press = vi.fn(async () => {
+      order.push('press');
+    });
+
+    await runExhibit(
+      [{ id: 'c', title: '클릭', role: 'staff', steps: [{ do: 'click', target: { selector: '#row' } }] }],
+      0,
+      controller.signal,
+      deps,
+    );
+
+    expect(order).toEqual(['press', 'click']);
+  });
+
   it('starts from the given scene', async () => {
     document.body.innerHTML = '<button id="row"></button>';
     const controller = new AbortController();

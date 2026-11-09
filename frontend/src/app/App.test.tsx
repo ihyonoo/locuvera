@@ -103,11 +103,11 @@ describe('exhibit mode', () => {
 
   it('starts the automatic tour when opened with ?exhibit=1', async () => {
     await renderAppAt('/login?exhibit=1');
-    expect(await screen.findByText(/자동 시연 중/)).toBeInTheDocument();
+    expect(await screen.findByText('실시간 장비 위치 조회')).toBeInTheDocument();
   });
 
   it('leaves ordinary visits alone', async () => {
     await renderAppAt('/login');
-    expect(screen.queryByText(/자동 시연 중/)).not.toBeInTheDocument();
+    expect(screen.queryByText('실시간 장비 위치 조회')).not.toBeInTheDocument();
   });
 });
