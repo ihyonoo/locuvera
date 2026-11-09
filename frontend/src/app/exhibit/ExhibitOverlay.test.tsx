@@ -84,36 +84,62 @@ describe('ExhibitOverlay', () => {
     document.getElementById('target')?.remove();
   });
 
-  it('goes straight back to the tour from the button without waiting a minute', async () => {
+  it('keeps playing when a person moves the mouse or clicks, and blocks the app underneath', async () => {
     renderOverlay();
     await screen.findByTestId('exhibit-caption');
+
     act(() => {
+      window.dispatchEvent(new Event('pointermove'));
       window.dispatchEvent(new Event('pointerdown'));
     });
-    expect(screen.getByText(/직접 조작 중/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '자동 시연으로 돌아가기' }));
 
     expect(screen.queryByText(/직접 조작 중/)).not.toBeInTheDocument();
-    expect(screen.getByTestId('exhibit-card')).toHaveTextContent('측위 보고 위조 차단');
+    expect(screen.getByTestId('exhibit-caption')).toBeInTheDocument();
+    expect(screen.getByTestId('exhibit-shield')).toBeInTheDocument();
   });
 
-  it('hands the screen over when a person moves in, and takes it back after a quiet minute', async () => {
+  it('hides the real mouse pointer until it moves, then hides it again', async () => {
+    renderOverlay();
+    const shield = await screen.findByTestId('exhibit-shield');
+    vi.useFakeTimers();
+    expect(shield).toHaveClass('exhibit-shield--still');
+
+    fireEvent.pointerMove(shield);
+    expect(shield).not.toHaveClass('exhibit-shield--still');
+
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
+    expect(shield).toHaveClass('exhibit-shield--still');
+  });
+
+  it('hands the screen over from the button, and takes it back after a quiet minute', async () => {
     renderOverlay();
     await screen.findByTestId('exhibit-caption');
     vi.useFakeTimers();
 
-    act(() => {
-      window.dispatchEvent(new Event('pointerdown'));
-    });
+    fireEvent.click(screen.getByRole('button', { name: '직접 조작하기' }));
+
     expect(screen.getByText(/직접 조작 중/)).toBeInTheDocument();
     expect(screen.getByText(/60초 동안 입력이 없으면/)).toBeInTheDocument();
     expect(screen.queryByTestId('exhibit-cursor')).not.toBeInTheDocument();
     expect(screen.queryByTestId('exhibit-caption')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('exhibit-shield')).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
+    expect(screen.queryByText(/직접 조작 중/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('exhibit-card')).toHaveTextContent('측위 보고 위조 차단');
+  });
+
+  it('goes straight back to the tour from the button without waiting a minute', async () => {
+    renderOverlay();
+    await screen.findByTestId('exhibit-caption');
+    fireEvent.click(screen.getByRole('button', { name: '직접 조작하기' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '자동 시연으로 돌아가기' }));
+
     expect(screen.queryByText(/직접 조작 중/)).not.toBeInTheDocument();
     expect(screen.getByTestId('exhibit-card')).toHaveTextContent('측위 보고 위조 차단');
   });

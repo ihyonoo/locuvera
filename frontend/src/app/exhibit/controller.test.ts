@@ -9,7 +9,6 @@ function setup(sceneCount = 3) {
   const controller = createExhibitController({
     sceneCount,
     idleMs: 60_000,
-    resumeGraceMs: 2_000,
     run: (startAt, signal, onScene) => {
       runs.push({ startAt, signal, onScene });
       return new Promise<void>(() => {});
@@ -33,11 +32,23 @@ describe('createExhibitController', () => {
     expect(modes).toEqual(['auto']);
   });
 
-  it('stops the tour as soon as a person touches the screen', () => {
+  it('keeps touring when a person moves the mouse or clicks', () => {
     const { controller, runs, modes } = setup();
     controller.start();
 
     controller.humanInput();
+    vi.advanceTimersByTime(120_000);
+
+    expect(runs[0].signal.aborted).toBe(false);
+    expect(runs).toHaveLength(1);
+    expect(modes).toEqual(['auto']);
+  });
+
+  it('hands the screen over only when asked', () => {
+    const { controller, runs, modes } = setup();
+    controller.start();
+
+    controller.takeOver();
 
     expect(runs[0].signal.aborted).toBe(true);
     expect(modes.at(-1)).toBe('manual');
@@ -47,7 +58,7 @@ describe('createExhibitController', () => {
     const { controller, runs, modes } = setup();
     controller.start();
     runs[0].onScene(1);
-    controller.humanInput();
+    controller.takeOver();
 
     vi.advanceTimersByTime(59_999);
     expect(runs).toHaveLength(1);
@@ -58,10 +69,10 @@ describe('createExhibitController', () => {
     expect(modes.at(-1)).toBe('auto');
   });
 
-  it('restarts the idle countdown on every input', () => {
+  it('restarts the idle countdown on every input while a person is using it', () => {
     const { controller, runs } = setup();
     controller.start();
-    controller.humanInput();
+    controller.takeOver();
 
     vi.advanceTimersByTime(50_000);
     controller.humanInput();
@@ -76,7 +87,7 @@ describe('createExhibitController', () => {
     const { controller, runs } = setup(3);
     controller.start();
     runs[0].onScene(2);
-    controller.humanInput();
+    controller.takeOver();
 
     vi.advanceTimersByTime(60_000);
 
@@ -87,7 +98,7 @@ describe('createExhibitController', () => {
     const { controller, runs, modes } = setup();
     controller.start();
     runs[0].onScene(1);
-    controller.humanInput();
+    controller.takeOver();
 
     controller.resume();
 
@@ -98,35 +109,22 @@ describe('createExhibitController', () => {
     expect(runs).toHaveLength(2);
   });
 
-  it('ignores the hand leaving the mouse for a moment after going back', () => {
-    const { controller, runs, modes } = setup();
-    controller.start();
-    controller.humanInput();
-    controller.resume();
-
-    controller.humanInput();
-    expect(runs[1].signal.aborted).toBe(false);
-    expect(modes.at(-1)).toBe('auto');
-
-    vi.advanceTimersByTime(2_000);
-    controller.humanInput();
-    expect(runs[1].signal.aborted).toBe(true);
-    expect(modes.at(-1)).toBe('manual');
-  });
-
-  it('does nothing when asked to go back while already touring', () => {
+  it('ignores repeated requests in the same mode', () => {
     const { controller, runs } = setup();
     controller.start();
 
     controller.resume();
+    expect(runs).toHaveLength(1);
 
+    controller.takeOver();
+    controller.takeOver();
     expect(runs).toHaveLength(1);
   });
 
   it('cancels the tour and the countdown when stopped', () => {
     const { controller, runs } = setup();
     controller.start();
-    controller.humanInput();
+    controller.takeOver();
 
     controller.stop();
     vi.advanceTimersByTime(120_000);

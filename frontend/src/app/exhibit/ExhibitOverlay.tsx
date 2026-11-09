@@ -1,4 +1,5 @@
-// 학술제 전시 모드 화면 층. 대본대로 앱을 조작하고, 관람객이 만지면 손을 뗀다
+// 학술제 전시 모드 화면 층. 대본대로 앱을 조작하고, '직접 조작하기'를 누르면 손을 뗀다
+// 자동 시연 중에는 투명한 막이 앱을 덮어 관람객의 마우스·클릭이 대본을 흐트러뜨리지 않는다
 // 시연 영상처럼 장면마다 간지(번호·제목)로 열고, 단계마다 아래 자막으로 설명한다
 // 간지·커서·클립·자막은 앱 위에 겹치며 클릭을 가로채지 않는다
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
@@ -11,8 +12,8 @@ import { EXHIBIT_SCENES } from './scenes';
 import { ensureDemoSession } from './session';
 
 const IDLE_MS = 60_000;
-// 돌아가기를 누른 뒤 손이 마우스에서 떨어지며 생기는 움직임은 사람 개입으로 보지 않는다
-const RESUME_GRACE_MS = 2_000;
+// 자동 시연 중 실제 마우스 포인터는 움직일 때만 이만큼 보이고 다시 숨는다 — 영상처럼 보이게
+const POINTER_SHOW_MS = 2_500;
 // 간지를 띄워 두는 최소 시간. 화면 이동·로그인·로딩은 그 뒤에서 끝난다
 const CARD_MS = 1_400;
 // exhibit.css의 간지·클립 페이드 시간과 맞춘다
@@ -72,7 +73,10 @@ export default function ExhibitOverlay({
   const [pressed, setPressed] = useState(false);
   const [clip, setClip] = useState<string | null>(null);
   const finishClip = useRef<(() => void) | null>(null);
-  const resumeTour = useRef<() => void>(() => {});
+  const tourControls = useRef({ takeOver: () => {}, resume: () => {} });
+  const shield = useRef<HTMLDivElement>(null);
+  const [pointerStill, setPointerStill] = useState(true);
+  const pointerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 순환은 화면 수명 동안 한 번만 만든다 — 첫 렌더의 값으로 고정
   const setup = useRef({ navigate, scenes, ensureSession, isHumanEvent, idleMs, cardMs });
 
@@ -164,7 +168,6 @@ export default function ExhibitOverlay({
     const controller = createExhibitController({
       sceneCount: config.scenes.length,
       idleMs: config.idleMs,
-      resumeGraceMs: RESUME_GRACE_MS,
       onMode: (next) => {
         setMode(next);
         if (next === 'manual') {
@@ -192,7 +195,7 @@ export default function ExhibitOverlay({
         }),
     });
 
-    resumeTour.current = () => controller.resume();
+    tourControls.current = { takeOver: () => controller.takeOver(), resume: () => controller.resume() };
     controller.start();
     const stopWatching = watchHumanInput(window, () => controller.humanInput(), config.isHumanEvent);
     return () => {
@@ -204,8 +207,37 @@ export default function ExhibitOverlay({
   const idleSec = Math.round(idleMs / 1000);
   const auto = mode === 'auto';
 
+  // 막 위의 휠은 뒤 페이지를 굴리지 않게 막는다(React onWheel은 passive라 직접 붙인다)
+  useEffect(() => {
+    const el = shield.current;
+    if (!el) return;
+    const block = (event: Event) => event.preventDefault();
+    el.addEventListener('wheel', block, { passive: false });
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', block);
+      el.removeEventListener('touchmove', block);
+    };
+  }, [auto]);
+
+  useEffect(() => () => clearTimeout(pointerTimer.current), []);
+
+  const showPointer = () => {
+    setPointerStill(false);
+    clearTimeout(pointerTimer.current);
+    pointerTimer.current = setTimeout(() => setPointerStill(true), POINTER_SHOW_MS);
+  };
+
   return (
     <div className="exhibit-layer">
+      {auto ? (
+        <div
+          ref={shield}
+          data-testid="exhibit-shield"
+          className={pointerStill ? 'exhibit-shield exhibit-shield--still' : 'exhibit-shield'}
+          onPointerMove={showPointer}
+        />
+      ) : null}
       {auto && clip ? (
         <div className="exhibit-clip">
           <video
@@ -253,11 +285,15 @@ export default function ExhibitOverlay({
         <div className="exhibit-banner" role="status">
           <span className="exhibit-banner__dot" aria-hidden="true" />
           <span>직접 조작 중 · {idleSec}초 동안 입력이 없으면 자동 시연으로 돌아갑니다</span>
-          <button type="button" className="exhibit-banner__resume" onClick={() => resumeTour.current()}>
+          <button type="button" className="exhibit-banner__resume" onClick={() => tourControls.current.resume()}>
             자동 시연으로 돌아가기
           </button>
         </div>
-      ) : null}
+      ) : (
+        <button type="button" className="exhibit-takeover" onClick={() => tourControls.current.takeOver()}>
+          직접 조작하기
+        </button>
+      )}
     </div>
   );
 }

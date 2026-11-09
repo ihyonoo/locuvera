@@ -1,23 +1,22 @@
 // 자동 순환과 직접 조작을 오가는 상태 기계
-// 사람이 만지면 순환을 끊고, idleMs 동안 입력이 없거나 돌아가기를 누르면 다음 장면부터 다시 돈다
+// 자동 순환은 '직접 조작하기'로만 멈춘다 — 마우스를 움직이거나 눌러도 계속 돈다
+// 직접 조작 중에는 idleMs 동안 입력이 없거나 돌아가기를 누르면 다음 장면부터 다시 돈다
 export type ExhibitMode = 'auto' | 'manual';
 
 type ControllerOptions = {
   sceneCount: number;
   idleMs: number;
-  // 돌아가기를 누른 뒤 손이 마우스에서 떨어지며 생기는 입력을 무시하는 시간
-  resumeGraceMs: number;
   run: (startAt: number, signal: AbortSignal, onScene: (index: number) => void) => Promise<void>;
   onMode: (mode: ExhibitMode) => void;
 };
 
-export function createExhibitController({ sceneCount, idleMs, resumeGraceMs, run, onMode }: ControllerOptions) {
+export function createExhibitController({ sceneCount, idleMs, run, onMode }: ControllerOptions) {
   let tour: AbortController | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
   let currentScene = 0;
-  let ignoreInputUntil = 0;
 
   const startTour = (startAt: number) => {
+    clearTimeout(idleTimer);
     tour = new AbortController();
     onMode('auto');
     run(startAt, tour.signal, (index) => {
@@ -25,37 +24,36 @@ export function createExhibitController({ sceneCount, idleMs, resumeGraceMs, run
     }).catch(() => {});
   };
 
-  const stopTour = () => {
-    tour?.abort();
-    tour = null;
-  };
+  const resumeFromNext = () => startTour((currentScene + 1) % sceneCount);
 
-  const resumeFromNext = () => {
+  const restartIdleCountdown = () => {
     clearTimeout(idleTimer);
-    startTour((currentScene + 1) % sceneCount);
+    idleTimer = setTimeout(resumeFromNext, idleMs);
   };
 
   return {
     start() {
       startTour(0);
     },
+    takeOver() {
+      if (!tour) return;
+      tour.abort();
+      tour = null;
+      onMode('manual');
+      restartIdleCountdown();
+    },
+    // 직접 조작 중 입력만 센다
     humanInput() {
-      if (Date.now() < ignoreInputUntil) return;
-      if (tour) {
-        stopTour();
-        onMode('manual');
-      }
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(resumeFromNext, idleMs);
+      if (!tour) restartIdleCountdown();
     },
     resume() {
       if (tour) return;
-      ignoreInputUntil = Date.now() + resumeGraceMs;
       resumeFromNext();
     },
     stop() {
       clearTimeout(idleTimer);
-      stopTour();
+      tour?.abort();
+      tour = null;
     },
   };
 }
