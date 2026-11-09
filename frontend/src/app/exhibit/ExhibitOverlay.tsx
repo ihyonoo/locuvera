@@ -282,7 +282,8 @@ export default function ExhibitOverlay({
   };
 
   return (
-    <div className="exhibit-layer">
+    // 이 층의 누름이 document까지 올라가면 Radix가 바깥 누름으로 보고 열린 창(증명서)을 닫는다
+    <div className="exhibit-layer" onPointerDown={(event) => event.stopPropagation()}>
       {auto ? (
         <div
           ref={shield}
