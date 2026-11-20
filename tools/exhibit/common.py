@@ -12,7 +12,7 @@ import requests
 DEFAULT_API = "https://mediledger.xyz/api"
 # 운영 서버 ssh 별칭과 compose 프로젝트 경로(deploy/deployment.md)
 DEFAULT_SSH_HOST = "deepi-personal-dev-server"
-DEFAULT_REMOTE_DIR = "/home/hwdev/projects/mediledger"
+DEFAULT_REMOTE_DIR = "/home/hwdev/projects/locuvera"
 HTTP_TIMEOUT_SEC = 20
 REMOTE_TIMEOUT_SEC = 90
 KST = timezone(timedelta(hours=9))
