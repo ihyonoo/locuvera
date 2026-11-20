@@ -12,7 +12,7 @@ main() {
     echo "[ci-deploy] 40자리 커밋 SHA가 필요하다" >&2
     exit 1
   fi
-  cd "${CI_DEPLOY_ROOT:-/home/hwdev/project/mediledger}"
+  cd "${CI_DEPLOY_ROOT:-/home/hwdev/projects/mediledger}"
 
   echo "[ci-deploy] $(date -Iseconds) start (sha requested: $sha)"
 
